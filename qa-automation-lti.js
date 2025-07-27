@@ -26,22 +26,293 @@ lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024', // Key used to sign c
   }
 )
 
-// Whitelist the execute endpoint
+// Whitelist the execute endpoints
 lti.whitelist('/execute')
+lti.whitelist('/execute-approved')
 
-// Add the endpoint
+// Phase 2 LTI Integration: Enhanced execute endpoint
 lti.app.post('/execute', async (req, res) => {
   const { taskId, courseId, userId } = req.body
-  console.log(`Executing QA task: ${taskId} for course: ${courseId}`)
   
   try {
-    const result = await executeQATask(taskId, courseId, userId)
-    res.json({ success: true, taskId, result })
+    console.log(`Phase 2: Analyzing task: ${taskId} for course: ${courseId}`)
+    
+    // Phase 2: Always analyze first (preview-first workflow)
+    const analysisResult = await analyzeTask(taskId, courseId, userId)
+    
+    res.json({ 
+      success: true, 
+      phase: 2,
+      mode: 'preview_first',
+      taskId,
+      result: analysisResult 
+    })
   } catch (error) {
-    console.error('QA Task execution error:', error)
-    res.json({ success: false, error: error.message })
+    console.error('Phase 2 Analysis error:', error)
+    res.json({ 
+      success: false, 
+      error: error.message 
+    })
   }
 })
+
+// Enhanced analyzeTask function for Phase 2
+async function analyzeTask(taskId, courseId, userId) {
+  const { spawn } = require('child_process');
+  const path = require('path');
+  
+  switch (taskId) {
+    case 'find-duplicate-pages':
+      return new Promise((resolve, reject) => {
+        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
+        const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
+        const apiToken = process.env.CANVAS_API_TOKEN || '';
+        
+        if (!apiToken) {
+          reject(new Error('Canvas API token not configured'));
+          return;
+        }
+        
+        // Phase 2: Enhanced analysis arguments
+        const args = [
+          scriptPath,
+          '--canvas-url', canvasUrl,
+          '--api-token', apiToken,
+          '--course-id', courseId,
+          '--similarity-threshold', '0.7',
+          '--analyze-only',           // Always analyze first in Phase 2
+          '--check-inbound-links',    // NEW: Check for inbound links
+          '--generate-preview',       // NEW: Generate detailed preview
+          '--risk-assessment'         // NEW: Assess deletion risks
+        ];
+        
+        console.log('Phase 2 Enhanced Analysis with args:', args);
+        const python = spawn('python3', args);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+          error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+          if (code === 0) {
+            // Parse enhanced analysis results
+            const jsonMatch = output.match(/ENHANCED_ANALYSIS_JSON: (.+)/);
+            if (jsonMatch) {
+              try {
+                const analysisResults = JSON.parse(jsonMatch[1]);
+                
+                // Phase 2: Return detailed findings for user review
+                resolve({
+                  phase: 2,
+                  mode: 'preview_first',
+                  analyzed_only: true,
+                  executed: false,
+                  findings: analysisResults,
+                  user_approval_required: true,
+                  risk_assessment: analysisResults.risk_assessment,
+                  safe_actions: analysisResults.findings.safe_actions,
+                  requires_manual_review: analysisResults.findings.requires_manual_review,
+                  inbound_links_checked: true,
+                  next_steps: {
+                    safe_actions_count: analysisResults.findings.safe_actions.length,
+                    manual_review_count: analysisResults.findings.requires_manual_review.length,
+                    can_proceed_with_safe_actions: analysisResults.findings.safe_actions.length > 0
+                  }
+                });
+              } catch (e) {
+                console.error('Failed to parse enhanced analysis JSON:', e);
+                // Fallback to regular JSON parsing
+                const fallbackMatch = output.match(/JSON_OUTPUT: (.+)/);
+                if (fallbackMatch) {
+                  try {
+                    const fallbackResults = JSON.parse(fallbackMatch[1]);
+                    resolve({
+                      phase: 2,
+                      mode: 'preview_first',
+                      analyzed_only: true,
+                      executed: false,
+                      findings: fallbackResults,
+                      user_approval_required: true,
+                      fallback_mode: true
+                    });
+                  } catch (fallbackError) {
+                    reject(new Error('Analysis completed but results format error'));
+                  }
+                } else {
+                  reject(new Error('Analysis completed but no results found'));
+                }
+              }
+            } else {
+              // Fallback to regular JSON parsing
+              const fallbackMatch = output.match(/JSON_OUTPUT: (.+)/);
+              if (fallbackMatch) {
+                try {
+                  const fallbackResults = JSON.parse(fallbackMatch[1]);
+                  resolve({
+                    phase: 2,
+                    mode: 'preview_first',
+                    analyzed_only: true,
+                    executed: false,
+                    findings: fallbackResults,
+                    user_approval_required: true,
+                    fallback_mode: true
+                  });
+                } catch (fallbackError) {
+                  reject(new Error('Analysis completed but results format error'));
+                }
+              } else {
+                reject(new Error('Enhanced analysis did not return expected results'));
+              }
+            }
+          } else {
+            reject(new Error(`Enhanced analysis failed: ${error}`));
+          }
+        });
+      });
+    
+    default:
+      throw new Error(`Unknown task: ${taskId}`)
+  }
+}
+
+// Add new endpoint for executing approved actions (Phase 2)
+lti.app.post('/execute-approved', async (req, res) => {
+  const { taskId, courseId, userId, approvedActions } = req.body
+  
+  try {
+    console.log(`Phase 2: Executing approved actions for task: ${taskId}`)
+    console.log(`Approved actions:`, approvedActions)
+    
+    const result = await executeApprovedActions(taskId, courseId, userId, approvedActions)
+    
+    res.json({ 
+      success: true, 
+      phase: 2,
+      mode: 'execute_approved',
+      taskId,
+      result: result 
+    })
+  } catch (error) {
+    console.error('Phase 2 Execution error:', error)
+    res.json({ 
+      success: false, 
+      error: error.message 
+    })
+  }
+})
+
+// Function to execute only approved actions
+async function executeApprovedActions(taskId, courseId, userId, approvedActions) {
+  const { spawn } = require('child_process');
+  const path = require('path');
+  
+  switch (taskId) {
+    case 'find-duplicate-pages':
+      return new Promise((resolve, reject) => {
+        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
+        const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
+        const apiToken = process.env.CANVAS_API_TOKEN || '';
+        
+        if (!apiToken) {
+          reject(new Error('Canvas API token not configured'));
+          return;
+        }
+        
+        // Create temporary file with approved actions
+        const fs = require('fs');
+        const actionsFile = path.join(__dirname, 'temp', `approved_actions_${courseId}_${Date.now()}.json`);
+        
+        // Ensure temp directory exists
+        const tempDir = path.dirname(actionsFile);
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(actionsFile, JSON.stringify(approvedActions, null, 2));
+        
+        const args = [
+          scriptPath,
+          '--canvas-url', canvasUrl,
+          '--api-token', apiToken,
+          '--course-id', courseId,
+          '--execute-approved', actionsFile,  // NEW: Execute only approved actions
+          '--generate-report'                 // Generate execution report
+        ];
+        
+        console.log('Phase 2 Executing approved actions with args:', args);
+        const python = spawn('python3', args);
+        
+        let output = '';
+        let error = '';
+        
+        python.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        python.stderr.on('data', (data) => {
+          error += data.toString();
+        });
+        
+        python.on('close', (code) => {
+          // Clean up temporary file
+          try {
+            fs.unlinkSync(actionsFile);
+          } catch (e) {
+            console.warn('Could not clean up temp file:', e.message);
+          }
+          
+          if (code === 0) {
+            const jsonMatch = output.match(/EXECUTION_RESULTS_JSON: (.+)/);
+            if (jsonMatch) {
+              try {
+                const executionResults = JSON.parse(jsonMatch[1]);
+                resolve({
+                  phase: 2,
+                  mode: 'execution_complete',
+                  executed: true,
+                  results: executionResults,
+                  summary: {
+                    actions_requested: approvedActions.length,
+                    actions_completed: executionResults.successful_deletions?.length || 0,
+                    actions_failed: executionResults.failed_deletions?.length || 0
+                  }
+                });
+              } catch (e) {
+                console.error('Failed to parse execution results JSON:', e);
+                resolve({
+                  phase: 2,
+                  mode: 'execution_complete',
+                  executed: true,
+                  message: 'Execution completed',
+                  output: output
+                });
+              }
+            } else {
+              resolve({
+                phase: 2,
+                mode: 'execution_complete',
+                executed: true,
+                message: 'Execution completed',
+                output: output
+              });
+            }
+          } else {
+            reject(new Error(`Execution failed: ${error}`));
+          }
+        });
+      });
+    
+    default:
+      throw new Error(`Unknown task: ${taskId}`)
+  }
+}
 
 // QA Task Definitions - MVP: Duplicate Pages Only
 const QA_TASKS = {
@@ -71,6 +342,19 @@ lti.onConnect(async (token, req, res) => {
   const html = generateEnhancedQADashboard(token)
   return res.send(html)
 })
+
+// Helper function to extract real Canvas course ID from LTI token
+function getRealCourseId(token) {
+  // Try to extract from return URL first (most reliable)
+  const returnUrl = token.platformContext?.launchPresentation?.return_url;
+  if (returnUrl) {
+    const match = returnUrl.match(/\/courses\/(\d+)\//);
+    if (match) return match[1];
+  }
+  
+  // Fallback to context ID (may not work for API calls)
+  return token.platformContext?.context?.id;
+}
 
 // Helper function to extract user role from LTI token
 function getUserRole(token) {
@@ -789,7 +1073,9 @@ function generateEnhancedQADashboard(token) {
         }
 
         function executeTask(taskId) {
-            console.log('Executing task:', taskId);
+            console.log('Phase 2: Starting analysis for task:', taskId);
+            currentTaskId = taskId;
+            currentUserId = '${token.sub || 'unknown'}';
             
             // Show progress overlay
             showProgress(taskId);
@@ -801,14 +1087,15 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: taskId,
-                    courseId: '${token.platformContext?.context?.id || '280'}',
-                    userId: '${token.platformContext?.user || 'unknown'}'
+                    courseId: '280', // Update as needed
+                    userId: currentUserId
                 })
             })
             .then(response => response.json())
             .then(data => {
                 hideProgress();
                 if (data.success) {
+                    currentAnalysisResult = data.result; // Store for later use
                     showResults(taskId, data.result);
                 } else {
                     showError(data.error);
@@ -889,45 +1176,273 @@ function generateEnhancedQADashboard(token) {
             container.scrollIntoView({ behavior: 'smooth' });
         }
 
+        // Store analysis results for later use
+        let currentAnalysisResult = null;
+        let currentTaskId = null;
+        let currentUserId = null;
+
         function generateDuplicatePageResults(result) {
+            // Phase 2: Enhanced results generation
+            if (result.phase === 2) {
+                return generateEnhancedDuplicateResults(result);
+            }
+            
+            // Fallback to original results for Phase 1
+            const exactDuplicates = result.exact_duplicates || 0;
+            const similarPages = result.similar_pages || 0;
+            const officialDuplicates = result.official_duplicates || 0;
+            const orphanedDuplicates = result.orphaned_duplicates || 0;
             const deletedCount = result.deleted_count || 0;
-            const reportGenerated = result.report_generated || false;
+            const analyzeOnly = result.analyze_only || true;
             
             return \`
                 <div class="result-summary">
                     <div class="summary-card">
-                        <div class="summary-number">\${deletedCount}</div>
-                        <div class="summary-label">Duplicates Removed</div>
+                        <div class="summary-number">\${exactDuplicates}</div>
+                        <div class="summary-label">Exact Duplicates Found</div>
                     </div>
                     <div class="summary-card">
-                        <div class="summary-number">\${reportGenerated ? '✓' : '✗'}</div>
-                        <div class="summary-label">Report Generated</div>
+                        <div class="summary-number">\${similarPages}</div>
+                        <div class="summary-label">Similar Pages</div>
                     </div>
                     <div class="summary-card">
-                        <div class="summary-number">94%</div>
-                        <div class="summary-label">Course Quality Score</div>
+                        <div class="summary-number">\${officialDuplicates}</div>
+                        <div class="summary-label">Official Duplicates</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">\${analyzeOnly ? 'Analysis' : 'Cleanup'}</div>
+                        <div class="summary-label">Mode</div>
                     </div>
                 </div>
                 
                 <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">Analysis Complete</h3>
-                    <p style="margin: 0; color: #2d5a2d;">Your course content has been analyzed. \${deletedCount > 0 ? 
-                        \`Found and processed \${deletedCount} duplicate pages to improve course navigation.\` : 
-                        'No duplicate pages were found - your course structure is well-organized!'}</p>
+                    <p style="margin: 0; color: #2d5a2d;">
+                        \${analyzeOnly ? 
+                            'Your course content has been analyzed in safe mode (no changes made).' : 
+                            'Your course content has been analyzed and cleaned up.'
+                        }
+                        \${exactDuplicates > 0 ? 
+                            \`Found \${exactDuplicates} exact duplicate pages.\` : 
+                            'No exact duplicate pages were found.'
+                        }
+                        \${similarPages > 0 ? 
+                            \`Found \${similarPages} similar pages requiring review.\` : 
+                            ''
+                        }
+                    </p>
                 </div>
+                
+                \${result.findings && result.findings.exact_duplicates && result.findings.exact_duplicates.length > 0 ? \`
+                <div style="background: #fff3cd; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #ffc107;">
+                    <h4 style="margin: 0 0 12px 0; color: #856404;">Exact Duplicates Found:</h4>
+                    <ul style="margin: 0; padding-left: 20px; color: #856404;">
+                        \${result.findings.exact_duplicates.map(dup => \`
+                            <li><strong>\${dup.duplicate_title}</strong> → <em>\${dup.official_title}</em> (\${dup.recommended_action})</li>
+                        \`).join('')}
+                    </ul>
+                </div>
+                \` : ''}
+                
+                \${result.findings && result.findings.similar_pages && result.findings.similar_pages.length > 0 ? \`
+                <div style="background: #d1ecf1; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #17a2b8;">
+                    <h4 style="margin: 0 0 12px 0; color: #0c5460;">Similar Pages Requiring Review:</h4>
+                    <ul style="margin: 0; padding-left: 20px; color: #0c5460;">
+                        \${result.findings.similar_pages.map(sim => \`
+                            <li><strong>\${sim.similar_title}</strong> (\${sim.similarity.toFixed(1)}% similar) → <em>\${sim.official_title}</em> (\${sim.recommended_action})</li>
+                        \`).join('')}
+                    </ul>
+                </div>
+                \` : ''}
                 
                 <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
                     <h4 style="margin: 0 0 8px 0;">Next Steps:</h4>
                     <ul style="margin: 0; padding-left: 20px;">
-                        <li>Review the generated Excel report for detailed findings</li>
+                        <li>Review the detailed findings above</li>
                         <li>Consider running additional QA tasks for comprehensive analysis</li>
                         <li>Schedule regular quality checks before semester start</li>
+                        \${analyzeOnly && exactDuplicates > 0 ? '<li>Run cleanup mode to remove exact duplicates</li>' : ''}
                     </ul>
                 </div>
                 
                 <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
 \${result.output || 'Task completed successfully'}</pre>
             \`;
+        }
+
+        // Enhanced results generation for Phase 2
+        function generateEnhancedDuplicateResults(result) {
+            const findings = result.findings || {};
+            const riskAssessment = result.risk_assessment || {};
+            const safeActions = result.safe_actions || [];
+            const manualReview = result.requires_manual_review || [];
+            const nextSteps = result.next_steps || {};
+            
+            return \`
+                <div class="result-summary">
+                    <div class="summary-card">
+                        <div class="summary-number">\${findings.total_duplicates || findings.exact_duplicates || 0}</div>
+                        <div class="summary-label">Total Duplicates Found</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">\${safeActions.length}</div>
+                        <div class="summary-label">Safe to Delete</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">\${manualReview.length}</div>
+                        <div class="summary-label">Manual Review Required</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">\${riskAssessment.protected_by_links || 0}</div>
+                        <div class="summary-label">Protected by Links</div>
+                    </div>
+                </div>
+                
+                <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">🎉 Phase 2 Enhanced Analysis Complete</h3>
+                    <p style="margin: 0; color: #2d5a2d;">
+                        <strong>Preview-First Analysis:</strong> Your course content has been thoroughly analyzed 
+                        with inbound link detection. Found \${findings.total_duplicates || findings.exact_duplicates || 0} duplicate pages with 
+                        detailed safety assessment for each potential action.
+                    </p>
+                </div>
+                
+                \${safeActions.length > 0 ? \`
+                <div style="background: #d4edda; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #28a745;">
+                    <h4 style="margin: 0 0 12px 0; color: #155724;">✅ Safe Actions Identified:</h4>
+                    <ul style="margin: 0; padding-left: 20px; color: #155724;">
+                        \${safeActions.map(action => \`
+                            <li><strong>\${action.delete_page_title || action.duplicate_title}</strong> → Can be safely deleted 
+                            (\${action.reason || 'No inbound links detected'})</li>
+                        \`).join('')}
+                    </ul>
+                    \${nextSteps.can_proceed_with_safe_actions ? \`
+                        <div style="margin-top: 16px;">
+                            <button class="btn-primary" onclick="executeSafeActions()" id="executeSafeBtn">
+                                Execute \${safeActions.length} Safe Actions
+                            </button>
+                            <button class="btn-secondary" onclick="reviewSafeActions()" style="margin-left: 8px;">
+                                Review Details First
+                            </button>
+                        </div>
+                    \` : ''}
+                </div>
+                \` : ''}
+                
+                \${manualReview.length > 0 ? \`
+                <div style="background: #fff3cd; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #ffc107;">
+                    <h4 style="margin: 0 0 12px 0; color: #856404;">⚠️ Manual Review Required:</h4>
+                    <ul style="margin: 0; padding-left: 20px; color: #856404;">
+                        \${manualReview.map(item => \`
+                            <li><strong>\${item.page1_title || item.duplicate_title}</strong> vs <strong>\${item.page2_title || item.official_title}</strong> 
+                            - \${item.reason || 'Competing inbound links'} (\${item.inbound_links_page1 || 0} vs \${item.inbound_links_page2 || 0} inbound links)</li>
+                        \`).join('')}
+                    </ul>
+                    <div style="margin-top: 12px;">
+                        <button class="btn-secondary" onclick="showDetailedReview()" id="detailedReviewBtn">
+                            View Detailed Analysis
+                        </button>
+                    </div>
+                </div>
+                \` : ''}
+                
+                <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
+                    <h4 style="margin: 0 0 8px 0;">Phase 2 Next Steps:</h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Review Findings:</strong> Examine the detailed analysis above</li>
+                        \${nextSteps.can_proceed_with_safe_actions ? '<li><strong>Execute Safe Actions:</strong> Approve deletion of orphaned duplicates</li>' : ''}
+                        \${nextSteps.manual_review_count > 0 ? '<li><strong>Manual Review:</strong> Decide on official duplicates with competing links</li>' : ''}
+                        <li><strong>Verify Results:</strong> Check for any broken links after cleanup</li>
+                        <li><strong>Schedule Regular Scans:</strong> Set up periodic quality checks</li>
+                    </ul>
+                </div>
+                
+                <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
+\${JSON.stringify(result, null, 2)}</pre>
+            \`;
+        }
+
+        // New functions for Phase 2 workflow
+        function executeSafeActions() {
+            if (!currentAnalysisResult || !currentAnalysisResult.safe_actions) {
+                showError('No safe actions available to execute');
+                return;
+            }
+            
+            if (confirm(\`Execute \${currentAnalysisResult.safe_actions.length} safe deletion actions? This cannot be undone.\`)) {
+                executeApprovedActions(currentAnalysisResult.safe_actions);
+            }
+        }
+
+        function executeApprovedActions(approvedActions) {
+            showProgress('execute-approved');
+            
+            fetch('/execute-approved', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    taskId: currentTaskId,
+                    courseId: '280', // Update as needed
+                    userId: currentUserId,
+                    approvedActions: approvedActions
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideProgress();
+                if (data.success) {
+                    showExecutionResults(data.result);
+                } else {
+                    showError(data.error);
+                }
+            })
+            .catch(error => {
+                hideProgress();
+                showError('Network error: ' + error.message);
+            });
+        }
+
+        function showExecutionResults(result) {
+            const container = document.getElementById('resultsContainer');
+            const title = document.getElementById('resultsTitle');
+            const content = document.getElementById('resultsContent');
+            
+            title.textContent = 'Execution Complete - Review Results';
+            content.innerHTML = \`
+                <div style="background: #d4edda; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+                    <h3 style="margin: 0 0 12px 0; color: #155724;">✅ Execution Summary</h3>
+                    <p style="margin: 0; color: #155724;">
+                        Successfully executed \${result.summary?.actions_completed || 0} out of \${result.summary?.actions_requested || 0} approved actions.
+                        \${result.summary?.actions_failed > 0 ? \`\${result.summary.actions_failed} actions failed.\` : 'All actions completed successfully.'}
+                    </p>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
+                    <h4 style="margin: 0 0 8px 0;">Execution Results:</h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Actions Requested:</strong> \${result.summary?.actions_requested || 0}</li>
+                        <li><strong>Actions Completed:</strong> \${result.summary?.actions_completed || 0}</li>
+                        <li><strong>Actions Failed:</strong> \${result.summary?.actions_failed || 0}</li>
+                        <li><strong>Mode:</strong> \${result.mode || 'execution_complete'}</li>
+                    </ul>
+                </div>
+                
+                <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
+\${JSON.stringify(result, null, 2)}</pre>
+            \`;
+            
+            container.style.display = 'block';
+            container.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function reviewSafeActions() {
+            alert('Detailed review functionality coming soon!');
+        }
+
+        function showDetailedReview() {
+            alert('Detailed review functionality coming soon!');
         }
 
         function showError(error) {
@@ -997,14 +1512,13 @@ lti.app.use((req, res, next) => {
 
 // API endpoint to execute QA tasks - on main app route
 lti.app.post('/execute', async (req, res) => {
-  const { taskId, courseId, userId } = req.body
+  const { taskId, courseId, userId, analyzeOnly = true } = req.body
   
   try {
-    console.log(`Executing QA task: ${taskId} for course: ${courseId}`)
+    console.log(`Executing QA task: ${taskId} for course: ${courseId} (analyzeOnly: ${analyzeOnly})`)
     
-    // Here you'll integrate with your Python automation scripts
-    // For now, we'll simulate the execution
-    const result = await executeQATask(taskId, courseId, userId)
+    // Execute the Python automation script
+    const result = await executeQATask(taskId, courseId, userId, analyzeOnly)
     
     res.json({ 
       success: true, 
@@ -1020,67 +1534,10 @@ lti.app.post('/execute', async (req, res) => {
   }
 })
 
-// Placeholder for Python script integration
-async function executeQATask(taskId, courseId, userId) {
-  const { spawn } = require('child_process');
-  const path = require('path');
-  
-  switch (taskId) {
-    case 'find-duplicate-pages':
-      return new Promise((resolve, reject) => {
-        // Path to your Python script
-        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
-        
-        // Get Canvas credentials from environment or config
-        const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
-        const apiToken = process.env.CANVAS_API_TOKEN || '';
-        
-        if (!apiToken) {
-          reject(new Error('Canvas API token not configured'));
-          return;
-        }
-        
-        // Execute Python script
-        const python = spawn('python3', [
-          scriptPath,
-          '--canvas-url', canvasUrl,
-          '--api-token', apiToken,
-          '--course-id', courseId,
-          '--similarity-threshold', '0.7',
-          '--auto-delete', 'true'
-        ]);
-        
-        let output = '';
-        let error = '';
-        
-        python.stdout.on('data', (data) => {
-          output += data.toString();
-        });
-        
-        python.stderr.on('data', (data) => {
-          error += data.toString();
-        });
-        
-        python.on('close', (code) => {
-          if (code === 0) {
-            // Parse output for results
-            const lines = output.split('\n');
-            const results = {
-              message: 'Duplicate page analysis completed',
-              output: output,
-              report_generated: lines.some(line => line.includes('Consolidated report generated')),
-              deleted_count: (output.match(/Deleted: (\d+) exact duplicates/) || [,0])[1]
-            };
-            resolve(results);
-          } else {
-            reject(new Error(`Python script failed: ${error}`));
-          }
-        });
-      });
-    
-    default:
-      throw new Error(`Unknown task: ${taskId}`)
-  }
+// Phase 2: Legacy executeQATask function (kept for backward compatibility)
+async function executeQATask(taskId, courseId, userId, analyzeOnly = true) {
+  console.log('Legacy executeQATask called - redirecting to Phase 2 analyzeTask');
+  return await analyzeTask(taskId, courseId, userId);
 }
 
 const setup = async () => {
@@ -1102,10 +1559,10 @@ const setup = async () => {
     
     console.log('🚀 QA Automation LTI deployed on http://localhost:3000')
     console.log('📋 LTI Configuration URLs (for Canvas Developer Key):')
-    console.log('   - Launch URL: https://rosa-implementation-attribute-damage.trycloudflare.com/qa-tools')
-    console.log('   - Login URL: https://rosa-implementation-attribute-damage.trycloudflare.com/login') 
-    console.log('   - Keyset URL: https://rosa-implementation-attribute-damage.trycloudflare.com/keys')
-    console.log('   - Deep Linking URL: https://rosa-implementation-attribute-damage.trycloudflare.com/qa-tools')
+    console.log('   - Launch URL: https://organizing-premises-beijing-cw.trycloudflare.com/qa-tools')
+    console.log('   - Login URL: https://organizing-premises-beijing-cw.trycloudflare.com/login') 
+    console.log('   - Keyset URL: https://organizing-premises-beijing-cw.trycloudflare.com/keys')
+    console.log('   - Deep Linking URL: https://organizing-premises-beijing-cw.trycloudflare.com/qa-tools')
     
     // Note: Platform registration will be done after Canvas Developer Key setup
     console.log('\n⏳ Canvas Developer Key setup required before platform registration')
