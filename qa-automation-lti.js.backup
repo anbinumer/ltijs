@@ -54,8 +54,7 @@ const QA_TASKS = {
 }
 
 // Main LTI launch handler
-lti.onConnect(async (token, req, res) => {
-  console.log('Full LTI Token:', JSON.stringify(token, null, 2)) // DEBUG: See actual token structure
+lti.onConnect((token, req, res) => {
   console.log('LTI Launch Token:', {
     iss: token.iss,
     aud: token.aud,
@@ -63,109 +62,12 @@ lti.onConnect(async (token, req, res) => {
     context: token.platformContext
   })
 
-  // Get real user name for audit purposes
-  const realUserName = await getRealUserName(token);
-  token.realUserName = realUserName;
-
   // Render QA Tools Dashboard
   const html = generateEnhancedQADashboard(token)
   return res.send(html)
 })
 
-// Helper function to extract user role from LTI token
-function getUserRole(token) {
-  if (!token.platformContext?.roles) return 'User';
-  
-  const roles = token.platformContext.roles;
-  
-  // Check for highest priority role first
-  if (roles.some(role => role.includes('Administrator'))) return 'Administrator';
-  if (roles.some(role => role.includes('Instructor'))) return 'Instructor';
-  if (roles.some(role => role.includes('TeachingAssistant'))) return 'Teaching Assistant';
-  if (roles.some(role => role.includes('Designer'))) return 'Course Designer';
-  if (roles.some(role => role.includes('Student'))) return 'Student';
-  
-  return 'Canvas User';
-}
-
-// Function to extract real Canvas course ID from LTI token
-function getRealCourseId(token) {
-  // Try to extract from return URL first
-  const returnUrl = token.platformContext?.launchPresentation?.return_url;
-  if (returnUrl) {
-    const match = returnUrl.match(/\/courses\/(\d+)\//);
-    if (match) return match[1];
-  }
-  
-  // Fallback to context ID (may not work for user lookup)
-  return token.platformContext?.context?.id;
-}
-
-// Function to get real user name using LTI Names and Roles Provisioning Service
-async function getRealUserName(token) {
-  try {
-    const namesRolesUrl = token.platformContext?.namesRoles?.context_memberships_url;
-    
-    console.log('=== USER NAME DEBUG (Current User) ===');
-    console.log('User UUID:', token.user);
-    console.log('Names & Roles URL:', namesRolesUrl);
-    
-    if (!namesRolesUrl) {
-      return 'Canvas User (No NRPS)';
-    }
-    
-    // Use ltijs built-in method to get current user from Canvas
-    const nrpsResponse = await lti.NamesAndRoles.getMembers(token);
-    console.log('NRPS Response type:', typeof nrpsResponse);
-    console.log('NRPS Response:', nrpsResponse);
-    
-    // Handle different response formats
-    let nrpsMembers = [];
-    if (Array.isArray(nrpsResponse)) {
-      nrpsMembers = nrpsResponse;
-    } else if (nrpsResponse && nrpsResponse.members) {
-      nrpsMembers = nrpsResponse.members;
-    } else if (nrpsResponse && Array.isArray(nrpsResponse.body)) {
-      nrpsMembers = nrpsResponse.body;
-    } else {
-      console.log('Unexpected NRPS response format');
-      return 'Canvas User (NRPS Format Error)';
-    }
-    
-    console.log('NRPS Members found:', nrpsMembers.length);
-    console.log('First member sample:', nrpsMembers[0]);
-    
-    // Find current user in the membership list
-    const currentUser = nrpsMembers.find(member => 
-      member.user_id === token.user || 
-      member.userId === token.user ||
-      member.lti_user_id === token.user
-    );
-    
-    if (currentUser) {
-      console.log('Found current user:', currentUser);
-      return currentUser.name || 
-             (currentUser.given_name + ' ' + currentUser.family_name) || 
-             currentUser.sortable_name || 
-             'Canvas User';
-    }
-    
-    console.log('Current user not found in members list');
-    return 'Canvas User (Not in Members)';
-  } catch (error) {
-    console.error('Error fetching current user name:', error);
-    return 'Canvas User (NRPS Error)';
-  }
-}
-
-// Helper function to extract user name (Canvas typically doesn't provide this)
-function extractUserName(token) {
-  // Canvas doesn't typically provide user names via LTI for privacy
-  // You could make a Canvas API call here if needed, but for now:
-  return 'Canvas User';
-}
-
-// Generate the QA Tools Dashboard HTML (AFTER getUserRole function)
+// Generate the QA Tools Dashboard HTML
 function generateEnhancedQADashboard(token) {
   const taskCategories = groupTasksByCategory()
   
@@ -264,6 +166,12 @@ function generateEnhancedQADashboard(token) {
             align-items: center;
         }
 
+        .category-header::before {
+            content: "🔧";
+            margin-right: 12px;
+            font-size: 18px;
+        }
+
         /* Enhanced task cards with better interactivity */
         .task-grid {
             display: grid;
@@ -355,154 +263,7 @@ function generateEnhancedQADashboard(token) {
             transform: scale(1.02);
         }
 
-        /* Analysis Preview Modal */
-        .analysis-preview {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease;
-        }
-
-        .analysis-preview.active {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .preview-card {
-            background: var(--canvas-surface);
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .preview-header {
-            padding: 24px 24px 0 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--canvas-border);
-            padding-bottom: 16px;
-            margin-bottom: 0;
-        }
-
-        .preview-header h2 {
-            margin: 0;
-            color: var(--canvas-text);
-            font-size: 20px;
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--canvas-text-light);
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-        }
-
-        .close-btn:hover {
-            background: #f0f0f0;
-            color: var(--canvas-text);
-        }
-
-        .preview-content {
-            padding: 24px;
-            overflow-y: auto;
-            flex: 1;
-        }
-
-        .preview-actions {
-            padding: 16px 24px 24px;
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            border-top: 1px solid var(--canvas-border);
-        }
-
-        .btn-primary, .btn-secondary {
-            padding: 12px 24px;
-            border-radius: 6px;
-            border: none;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .btn-primary {
-            background: var(--acu-red);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--acu-red-dark);
-        }
-
-        .btn-secondary {
-            background: #f8f9fa;
-            color: var(--canvas-text);
-            border: 1px solid var(--canvas-border);
-        }
-
-        .btn-secondary:hover {
-            background: #e9ecef;
-        }
-
-        .analysis-scope {
-            background: var(--acu-cream-light);
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border-left: 4px solid var(--acu-deep-purple);
-        }
-
-        .scope-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-
-        .scope-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .methodology-box {
-            background: #f8f9fa;
-            padding: 16px;
-            border-radius: 6px;
-            margin-top: 16px;
-        }
-
-        .methodology-box h4 {
-            margin: 0 0 8px 0;
-            color: var(--canvas-text);
-            font-size: 14px;
-        }
-
-        .methodology-box p {
-            margin: 0;
-            font-size: 13px;
-            color: var(--canvas-text-light);
-            line-height: 1.4;
-        }
+        /* Progress overlay for task execution */
         .progress-overlay {
             position: fixed;
             top: 0;
@@ -643,9 +404,9 @@ function generateEnhancedQADashboard(token) {
         <h1>Canvas QA Automation Suite</h1>
         <p>Streamline your course quality assurance with intelligent automation and detailed reporting.</p>
         <div class="course-info">
-            <strong>User:</strong> ${token.realUserName || 'Canvas User'} | 
-            <strong>Course:</strong> ${token.platformContext?.context?.title || 'Unknown Course'} |
-            <strong>Role:</strong> ${getUserRole(token)}
+            <strong>User:</strong> ${token.given_name || 'Learning'} ${token.family_name || 'Technologist'} | 
+            <strong>Course:</strong> ${token.platformContext?.title || 'Canvas Course'} |
+            <strong>Role:</strong> Quality Assurance Specialist
         </div>
     </div>
 
@@ -654,13 +415,13 @@ function generateEnhancedQADashboard(token) {
             <div class="category-header">${category}</div>
             <div class="task-grid">
                 ${tasks.map(task => `
-                    <div class="task-card" onclick="startAnalysis('${task.id}')" tabindex="0" role="button" aria-label="Analyze ${task.name}">
+                    <div class="task-card" onclick="executeTask('${task.id}')" tabindex="0" role="button" aria-label="Execute ${task.name}">
                         <div class="task-name">${task.name}</div>
                         <div class="task-description">${task.description}</div>
                         <div class="task-meta">
-                            <span class="task-status">Ready for Analysis</span>
-                            <button class="task-button" onclick="event.stopPropagation(); startAnalysis('${task.id}')">
-                                Begin Analysis
+                            <span class="task-status">Ready</span>
+                            <button class="task-button" onclick="event.stopPropagation(); executeTask('${task.id}')">
+                                Start Analysis
                             </button>
                         </div>
                     </div>
@@ -669,22 +430,7 @@ function generateEnhancedQADashboard(token) {
         </div>
     `).join('')}
 
-    <!-- Analysis Preview Modal -->
-    <div class="analysis-preview" id="analysisPreview">
-        <div class="preview-card">
-            <div class="preview-header">
-                <h2 id="previewTitle">Analysis Overview</h2>
-                <button class="close-btn" onclick="closePreview()">&times;</button>
-            </div>
-            <div class="preview-content" id="previewContent">
-                <!-- Preview content will be populated here -->
-            </div>
-            <div class="preview-actions">
-                <button class="btn-secondary" onclick="closePreview()">Review Later</button>
-                <button class="btn-primary" onclick="proceedWithAnalysis()" id="proceedBtn">Proceed with Analysis</button>
-            </div>
-        </div>
-    </div>
+    <!-- Progress Overlay -->
     <div class="progress-overlay" id="progressOverlay">
         <div class="progress-card">
             <div class="progress-spinner"></div>
@@ -704,90 +450,6 @@ function generateEnhancedQADashboard(token) {
     </div>
 
     <script>
-        let currentTaskId = null;
-
-        function startAnalysis(taskId) {
-            console.log('Starting analysis preview for:', taskId);
-            currentTaskId = taskId;
-            showAnalysisPreview(taskId);
-        }
-
-        function showAnalysisPreview(taskId) {
-            const preview = document.getElementById('analysisPreview');
-            const title = document.getElementById('previewTitle');
-            const content = document.getElementById('previewContent');
-            
-            // Customize preview based on task type
-            if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Duplicate Page Analysis Preview';
-                content.innerHTML = generateDuplicateAnalysisPreview();
-            }
-            
-            preview.classList.add('active');
-        }
-
-        function generateDuplicateAnalysisPreview() {
-            return \`
-                <div class="analysis-scope">
-                    <h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Analysis Scope</h3>
-                    <div class="scope-item">
-                        <span>Content to Analyze:</span>
-                        <strong>All course pages and modules</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Detection Method:</span>
-                        <strong>Content similarity analysis</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Similarity Threshold:</span>
-                        <strong>70% matching content</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Estimated Duration:</span>
-                        <strong>2-3 minutes</strong>
-                    </div>
-                </div>
-                
-                <h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">What This Analysis Will Do:</h4>
-                <ol style="margin: 0 0 16px 0; padding-left: 20px; color: var(--canvas-text-light);">
-                    <li>Scan all published and unpublished pages in your course</li>
-                    <li>Compare content using text similarity algorithms</li>
-                    <li>Identify pages with 70% or higher content overlap</li>
-                    <li>Generate a detailed report of findings</li>
-                    <li>Present recommendations for review</li>
-                </ol>
-                
-                <div style="background: #e8f5e8; padding: 16px; border-radius: 6px; margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2d5a2d;">Safe Analysis Process</h4>
-                    <p style="margin: 0; color: #2d5a2d; font-size: 14px;">
-                        This analysis <strong>will not modify</strong> any content. You'll review all findings 
-                        before deciding which actions to take.
-                    </p>
-                </div>
-                
-                <div class="methodology-box">
-                    <h4>Technical Methodology</h4>
-                    <p>Uses Canvas API to retrieve page content, applies natural language processing 
-                    for similarity detection, and identifies both exact duplicates and near-duplicates 
-                    based on content analysis rather than simple text matching.</p>
-                </div>
-            \`;
-        }
-
-        function closePreview() {
-            const preview = document.getElementById('analysisPreview');
-            preview.classList.remove('active');
-            currentTaskId = null;
-        }
-
-        function proceedWithAnalysis() {
-            if (!currentTaskId) return;
-            
-            const taskToExecute = currentTaskId; // Store it before closing
-            closePreview();
-            executeTask(taskToExecute); // Use the stored value
-        }
-
         function executeTask(taskId) {
             console.log('Executing task:', taskId);
             
@@ -801,8 +463,8 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: taskId,
-                    courseId: '${token.platformContext?.context?.id || '280'}',
-                    userId: '${token.platformContext?.user || 'unknown'}'
+                    courseId: '${token.platformContext?.id || '280'}',
+                    userId: '${token.sub || 'unknown'}'
                 })
             })
             .then(response => response.json())
@@ -828,13 +490,13 @@ function generateEnhancedQADashboard(token) {
             // Customize progress text based on task
             const progressMessages = {
                 'find-duplicate-pages': {
-                    text: 'Analyzing course content for duplicates...',
-                    details: 'Connecting to Canvas API and retrieving course data'
+                    text: 'Analyzing course pages for duplicates...',
+                    details: 'Scanning content, comparing similarity, and identifying cleanup opportunities'
                 }
             };
             
             const message = progressMessages[taskId] || {
-                text: 'Processing analysis...',
+                text: 'Processing QA task...',
                 details: 'This may take a few moments'
             };
             
@@ -842,14 +504,13 @@ function generateEnhancedQADashboard(token) {
             progressDetails.textContent = message.details;
             overlay.classList.add('active');
             
-            // Detailed progress steps
+            // Simulate progress updates
             let step = 0;
             const steps = [
-                'Retrieving course pages and modules...',
-                'Analyzing content structure and text...',
-                'Comparing pages for similarity patterns...',
-                'Identifying duplicate and near-duplicate content...',
-                'Generating comprehensive analysis report...'
+                'Connecting to Canvas API...',
+                'Retrieving course content...',
+                'Analyzing content structure...',
+                'Generating detailed report...'
             ];
             
             const progressInterval = setInterval(() => {
@@ -857,9 +518,9 @@ function generateEnhancedQADashboard(token) {
                     progressDetails.textContent = steps[step];
                     step++;
                 } else {
-                    progressDetails.textContent = 'Finalizing analysis results...';
+                    clearInterval(progressInterval);
                 }
-            }, 3000);
+            }, 2000);
             
             // Store interval for cleanup
             overlay.dataset.interval = progressInterval;
@@ -881,7 +542,7 @@ function generateEnhancedQADashboard(token) {
             
             // Customize results based on task type
             if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Analysis Complete - Review Findings';
+                title.textContent = '🎉 Duplicate Page Analysis Complete';
                 content.innerHTML = generateDuplicatePageResults(result);
             }
             
@@ -910,10 +571,10 @@ function generateEnhancedQADashboard(token) {
                 </div>
                 
                 <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">Analysis Complete</h3>
-                    <p style="margin: 0; color: #2d5a2d;">Your course content has been analyzed. \${deletedCount > 0 ? 
-                        \`Found and processed \${deletedCount} duplicate pages to improve course navigation.\` : 
-                        'No duplicate pages were found - your course structure is well-organized!'}</p>
+                    <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">✅ Great Work!</h3>
+                    <p style="margin: 0; color: #2d5a2d;">Your course content is well-organized. \${deletedCount > 0 ? 
+                        \`We removed \${deletedCount} duplicate pages to improve student navigation.\` : 
+                        'No duplicate pages were found - your course structure is excellent!'}</p>
                 </div>
                 
                 <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
@@ -935,11 +596,11 @@ function generateEnhancedQADashboard(token) {
             const title = document.getElementById('resultsTitle');
             const content = document.getElementById('resultsContent');
             
-            title.textContent = 'Analysis Encountered an Issue';
+            title.textContent = '⚠️ Task Encountered an Issue';
             content.innerHTML = \`
                 <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107;">
-                    <h3 style="margin: 0 0 12px 0; color: #856404;">Analysis Could Not Complete</h3>
-                    <p style="margin: 0 0 16px 0; color: #856404;">The analysis process encountered an unexpected issue. This doesn't indicate any problems with your course content.</p>
+                    <h3 style="margin: 0 0 12px 0; color: #856404;">Don't worry - this is normal</h3>
+                    <p style="margin: 0 0 16px 0; color: #856404;">QA automation can sometimes encounter unexpected situations. This doesn't mean anything is broken with your course.</p>
                     <details style="margin-top: 16px;">
                         <summary style="cursor: pointer; font-weight: 600;">Technical Details</summary>
                         <pre style="background: #f8f9fa; padding: 12px; margin-top: 8px; border-radius: 4px; font-size: 12px;">\${error}</pre>
@@ -966,7 +627,7 @@ function generateEnhancedQADashboard(token) {
                 if (e.target.classList.contains('task-card')) {
                     e.preventDefault();
                     const taskId = e.target.onclick.toString().match(/'([^']+)'/)[1];
-                    startAnalysis(taskId);
+                    executeTask(taskId);
                 }
             }
         });
@@ -1090,22 +751,22 @@ const setup = async () => {
     
     // Register Canvas platform
     await lti.registerPlatform({
-      url: 'https://aculeo.test.instructure.com', // Change from canvas.test.instructure.com
+      url: 'https://canvas.test.instructure.com',
       name: 'Canvas Test',
       clientId: '226430000000000274',
-      authenticationEndpoint: 'https://aculeo.test.instructure.com/api/lti/authorize_redirect',
-      accesstokenEndpoint: 'https://aculeo.test.instructure.com/login/oauth2/token',
-      authConfig: { method: 'JWK_SET', key: 'https://aculeo.test.instructure.com/api/lti/security/jwks' }
+      authenticationEndpoint: 'https://canvas.test.instructure.com/api/lti/authorize_redirect',
+      accesstokenEndpoint: 'https://canvas.test.instructure.com/login/oauth2/token',
+      authConfig: { method: 'JWK_SET', key: 'https://canvas.test.instructure.com/api/lti/security/jwks' }
     })
 
     console.log('✅ Canvas platform registered')
     
     console.log('🚀 QA Automation LTI deployed on http://localhost:3000')
     console.log('📋 LTI Configuration URLs (for Canvas Developer Key):')
-    console.log('   - Launch URL: https://rosa-implementation-attribute-damage.trycloudflare.com/qa-tools')
-    console.log('   - Login URL: https://rosa-implementation-attribute-damage.trycloudflare.com/login') 
-    console.log('   - Keyset URL: https://rosa-implementation-attribute-damage.trycloudflare.com/keys')
-    console.log('   - Deep Linking URL: https://rosa-implementation-attribute-damage.trycloudflare.com/qa-tools')
+    console.log('   - Launch URL: https://anticipated-isle-clearance-shade.trycloudflare.com/qa-tools')
+    console.log('   - Login URL: https://anticipated-isle-clearance-shade.trycloudflare.com/login') 
+    console.log('   - Keyset URL: https://anticipated-isle-clearance-shade.trycloudflare.com/keys')
+    console.log('   - Deep Linking URL: https://anticipated-isle-clearance-shade.trycloudflare.com/qa-tools')
     
     // Note: Platform registration will be done after Canvas Developer Key setup
     console.log('\n⏳ Canvas Developer Key setup required before platform registration')
