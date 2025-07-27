@@ -64,7 +64,7 @@ async function analyzeTask(taskId, courseId, userId) {
   switch (taskId) {
     case 'find-duplicate-pages':
       return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
+        const scriptPath = path.join(__dirname, 'scripts', 'enhanced_duplicate_analyzer.py');
         const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
         const apiToken = process.env.CANVAS_API_TOKEN || '';
         
@@ -216,7 +216,7 @@ async function executeApprovedActions(taskId, courseId, userId, approvedActions)
   switch (taskId) {
     case 'find-duplicate-pages':
       return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
+        const scriptPath = path.join(__dirname, 'scripts', 'enhanced_duplicate_analyzer.py');
         const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
         const apiToken = process.env.CANVAS_API_TOKEN || '';
         

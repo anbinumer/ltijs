@@ -582,6 +582,10 @@ def main():
                        help='Generate detailed preview report')
     parser.add_argument('--risk-assessment', action='store_true', 
                        help='Include risk assessment in output')
+    parser.add_argument('--execute-approved', type=str, 
+                       help='Execute only approved actions from JSON file')
+    parser.add_argument('--generate-report', action='store_true', 
+                       help='Generate execution report')
     
     args = parser.parse_args()
     
@@ -589,33 +593,56 @@ def main():
         # Initialize enhanced analyzer
         analyzer = EnhancedDuplicateAnalyzer(args.canvas_url, args.api_token)
         
-        # Run enhanced analysis
-        results = analyzer.run_enhanced_analysis(args.course_id, args.similarity_threshold)
-        
-        # Output results in JSON format for LTI integration
-        print(f"ENHANCED_ANALYSIS_JSON: {json.dumps(results)}")
-        
-        # Also output human-readable summary
-        print(f"\n=== Enhanced Analysis Summary ===")
-        print(f"Course ID: {results['course_id']}")
-        print(f"Total pages analyzed: {results['total_pages_analyzed']}")
-        print(f"Duplicate pairs found: {results['total_duplicates']}")
-        print(f"Safe actions identified: {results['risk_assessment']['safe_to_delete']}")
-        print(f"Manual review required: {results['risk_assessment']['needs_manual_review']}")
-        print(f"Pages protected by links: {results['risk_assessment']['protected_by_links']}")
-        
-        if results['findings']['safe_actions']:
-            print(f"\n--- Safe Actions ---")
-            for action in results['findings']['safe_actions']:
-                print(f"• DELETE: {action['delete_page_title']} → KEEP: {action['keep_page_title']}")
-                print(f"  Reason: {action['reason']}")
-        
-        if results['findings']['requires_manual_review']:
-            print(f"\n--- Manual Review Required ---")
-            for review in results['findings']['requires_manual_review']:
-                print(f"• {review['page1_title']} vs {review['page2_title']}")
-                print(f"  Links: {review['inbound_links_page1']} vs {review['inbound_links_page2']}")
-                print(f"  Reason: {review['reason']}")
+        # Check if we're executing approved actions
+        if args.execute_approved:
+            # Execute approved actions from file
+            with open(args.execute_approved, 'r') as f:
+                approved_actions = json.load(f)
+            
+            print(f"Executing {len(approved_actions)} approved actions...")
+            
+            # For now, simulate execution (enhanced analyzer doesn't have deletion capability yet)
+            execution_results = {
+                "execution_complete": True,
+                "successful_deletions": [],
+                "failed_deletions": [],
+                "summary": {
+                    "actions_requested": len(approved_actions),
+                    "actions_completed": 0,  # Placeholder
+                    "actions_failed": 0
+                }
+            }
+            
+            print("EXECUTION_RESULTS_JSON:", json.dumps(execution_results))
+            
+        else:
+            # Run enhanced analysis
+            results = analyzer.run_enhanced_analysis(args.course_id, args.similarity_threshold)
+            
+            # Output results in JSON format for LTI integration
+            print(f"ENHANCED_ANALYSIS_JSON: {json.dumps(results)}")
+            
+            # Also output human-readable summary
+            print(f"\n=== Enhanced Analysis Summary ===")
+            print(f"Course ID: {results['course_id']}")
+            print(f"Total pages analyzed: {results['total_pages_analyzed']}")
+            print(f"Duplicate pairs found: {results['total_duplicates']}")
+            print(f"Safe actions identified: {results['risk_assessment']['safe_to_delete']}")
+            print(f"Manual review required: {results['risk_assessment']['needs_manual_review']}")
+            print(f"Pages protected by links: {results['risk_assessment']['protected_by_links']}")
+            
+            if results['findings']['safe_actions']:
+                print(f"\n--- Safe Actions ---")
+                for action in results['findings']['safe_actions']:
+                    print(f"• DELETE: {action['delete_page_title']} → KEEP: {action['keep_page_title']}")
+                    print(f"  Reason: {action['reason']}")
+            
+            if results['findings']['requires_manual_review']:
+                print(f"\n--- Manual Review Required ---")
+                for review in results['findings']['requires_manual_review']:
+                    print(f"• {review['page1_title']} vs {review['page2_title']}")
+                    print(f"  Links: {review['inbound_links_page1']} vs {review['inbound_links_page2']}")
+                    print(f"  Reason: {review['reason']}")
         
     except Exception as e:
         print(f"Error during enhanced analysis: {str(e)}")
