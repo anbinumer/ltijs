@@ -34,6 +34,9 @@ import hashlib
 from dataclasses import dataclass
 from collections import defaultdict
 import logging
+from datetime import datetime
+import pandas as pd
+import pytz
 
 @dataclass
 class LinkReference:
@@ -565,6 +568,98 @@ class EnhancedDuplicateAnalyzer:
         
         return results
 
+    def generate_excel_report(self, results: Dict, course_id: str) -> str:
+        """
+        Generate comprehensive Excel report for enhanced analysis results.
+        
+        Returns the path to the generated Excel file.
+        """
+        timestamp = datetime.now(pytz.UTC).strftime('%Y%m%d_%H%M%S')
+        report_file = f"enhanced_duplicate_analysis_{course_id}_{timestamp}.xlsx"
+        
+        with pd.ExcelWriter(report_file, engine='xlsxwriter') as writer:
+            # Summary sheet
+            summary_data = [{
+                'Course ID': results['course_id'],
+                'Analysis Type': results['analysis_type'],
+                'Total Pages Analyzed': results['total_pages_analyzed'],
+                'Total Duplicates Found': results['total_duplicates'],
+                'Similarity Threshold': results['similarity_threshold'],
+                'Safe Actions Identified': results['risk_assessment']['safe_to_delete'],
+                'Manual Review Required': results['risk_assessment']['needs_manual_review'],
+                'Pages Protected by Links': results['risk_assessment']['protected_by_links'],
+                'Analysis Timestamp': datetime.now(pytz.UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+            }]
+            pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+            
+            # Safe Actions sheet
+            if results['findings']['safe_actions']:
+                safe_actions_data = []
+                for action in results['findings']['safe_actions']:
+                    safe_actions_data.append({
+                        'Delete Page Title': action['delete_page_title'],
+                        'Keep Page Title': action['keep_page_title'],
+                        'Reason': action['reason'],
+                        'Confidence': action['confidence'],
+                        'Risk Level': 'LOW',
+                        'Recommended Action': 'SAFE TO DELETE'
+                    })
+                pd.DataFrame(safe_actions_data).to_excel(writer, sheet_name='Safe Actions', index=False)
+            
+            # Manual Review Required sheet
+            if results['findings']['requires_manual_review']:
+                manual_review_data = []
+                for review in results['findings']['requires_manual_review']:
+                    manual_review_data.append({
+                        'Page 1 Title': review['page1_title'],
+                        'Page 2 Title': review['page2_title'],
+                        'Page 1 Inbound Links': review['inbound_links_page1'],
+                        'Page 2 Inbound Links': review['inbound_links_page2'],
+                        'Reason': review['reason'],
+                        'Manual Steps': '; '.join(review.get('manual_steps', [])),
+                        'Risk Level': 'HIGH',
+                        'Recommended Action': 'MANUAL REVIEW REQUIRED'
+                    })
+                pd.DataFrame(manual_review_data).to_excel(writer, sheet_name='Manual Review', index=False)
+            
+            # Detailed Duplicate Pairs sheet
+            if results['findings']['duplicate_pairs']:
+                duplicate_pairs_data = []
+                for pair in results['findings']['duplicate_pairs']:
+                    duplicate_pairs_data.append({
+                        'Page 1 Title': pair['page1']['title'],
+                        'Page 1 URL': pair['page1']['url'],
+                        'Page 1 Integration Score': pair['page1']['integration_score'],
+                        'Page 1 Safety Level': pair['page1']['safety_level'],
+                        'Page 1 Inbound Links': pair['page1']['inbound_links_count'],
+                        'Page 2 Title': pair['page2']['title'],
+                        'Page 2 URL': pair['page2']['url'],
+                        'Page 2 Integration Score': pair['page2']['integration_score'],
+                        'Page 2 Safety Level': pair['page2']['safety_level'],
+                        'Page 2 Inbound Links': pair['page2']['inbound_links_count'],
+                        'Similarity': f"{pair['similarity']:.1%}",
+                        'Recommendation Action': pair['recommendation']['action'],
+                        'Recommendation Confidence': pair['recommendation']['confidence'],
+                        'Recommendation Reason': pair['recommendation']['reason'],
+                        'Safe to Execute': pair['recommendation']['safe_to_execute']
+                    })
+                pd.DataFrame(duplicate_pairs_data).to_excel(writer, sheet_name='Duplicate Pairs', index=False)
+            
+            # Risk Assessment sheet
+            risk_data = [{
+                'Protected by Links': results['risk_assessment']['protected_by_links'],
+                'Safe to Delete': results['risk_assessment']['safe_to_delete'],
+                'Needs Manual Review': results['risk_assessment']['needs_manual_review'],
+                'Link Analysis Completed': results['risk_assessment']['link_analysis_completed'],
+                'Overall Safety Level': results['recommendations']['safety_level'],
+                'Estimated Time Saved': results['recommendations']['estimated_time_saved'],
+                'Immediate Actions': results['recommendations']['immediate_actions'],
+                'Review Required': results['recommendations']['review_required']
+            }]
+            pd.DataFrame(risk_data).to_excel(writer, sheet_name='Risk Assessment', index=False)
+        
+        return report_file
+
 
 def main():
     """Main function for command-line usage"""
@@ -621,6 +716,14 @@ def main():
             
             # Output results in JSON format for LTI integration
             print(f"ENHANCED_ANALYSIS_JSON: {json.dumps(results)}")
+            
+            # Generate Excel report if requested
+            if args.generate_report:
+                try:
+                    report_file = analyzer.generate_excel_report(results, args.course_id)
+                    print(f"\n📊 Excel report generated: {report_file}")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not generate Excel report: {e}")
             
             # Also output human-readable summary
             print(f"\n=== Enhanced Analysis Summary ===")
