@@ -992,9 +992,9 @@ function generateEnhancedQADashboard(token) {
         let currentAnalysisResult = null;
         let currentUserId = '${token.sub || 'unknown'}';
 
-        // Main function to start analysis (Phase 2)
+        // Phase 2: Use existing executeTask function but add startAnalysis wrapper
         function startAnalysis(taskId) {
-            console.log('Phase 2: Starting analysis preview for:', taskId);
+            console.log('Starting analysis preview for:', taskId);
             currentTaskId = taskId;
             showAnalysisPreview(taskId);
         }
@@ -1004,9 +1004,8 @@ function generateEnhancedQADashboard(token) {
             const title = document.getElementById('previewTitle');
             const content = document.getElementById('previewContent');
             
-            // Customize preview based on task type
             if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Phase 2: Enhanced Duplicate Analysis Preview';
+                title.textContent = 'Duplicate Page Analysis Preview';
                 content.innerHTML = generateDuplicateAnalysisPreview();
             }
             
@@ -1016,22 +1015,14 @@ function generateEnhancedQADashboard(token) {
         function generateDuplicateAnalysisPreview() {
             return \`
                 <div class="analysis-scope">
-                    <h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Enhanced Analysis Scope (Phase 2)</h3>
+                    <h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Analysis Scope</h3>
                     <div class="scope-item">
                         <span>Content to Analyze:</span>
-                        <strong>All course pages, modules, and assignments</strong>
+                        <strong>All course pages and modules</strong>
                     </div>
                     <div class="scope-item">
                         <span>Detection Method:</span>
-                        <strong>Content similarity + inbound link analysis</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Safety Features:</span>
-                        <strong>Link dependency mapping before deletion</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Risk Assessment:</span>
-                        <strong>Categorize by deletion safety level</strong>
+                        <strong>Content similarity analysis</strong>
                     </div>
                     <div class="scope-item">
                         <span>Similarity Threshold:</span>
@@ -1039,47 +1030,25 @@ function generateEnhancedQADashboard(token) {
                     </div>
                     <div class="scope-item">
                         <span>Estimated Duration:</span>
-                        <strong>3-5 minutes (enhanced analysis)</strong>
+                        <strong>2-3 minutes</strong>
                     </div>
                 </div>
                 
-                <h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">Enhanced Phase 2 Analysis Process:</h4>
+                <h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">What This Analysis Will Do:</h4>
                 <ol style="margin: 0 0 16px 0; padding-left: 20px; color: var(--canvas-text-light);">
-                    <li><strong>Content Discovery:</strong> Scan all published and unpublished pages</li>
-                    <li><strong>Similarity Detection:</strong> Compare content using advanced algorithms</li>
-                    <li><strong>Inbound Link Mapping:</strong> Identify which pages are linked from other content</li>
-                    <li><strong>Risk Assessment:</strong> Categorize duplicates by deletion safety</li>
-                    <li><strong>Smart Recommendations:</strong> Suggest which duplicate to keep based on usage</li>
-                    <li><strong>Preview Generation:</strong> Show detailed findings before any action</li>
+                    <li>Scan all published and unpublished pages in your course</li>
+                    <li>Compare content using text similarity algorithms</li>
+                    <li>Identify pages with 70% or higher content overlap</li>
+                    <li>Generate a detailed report of findings</li>
+                    <li>Present recommendations for review</li>
                 </ol>
                 
                 <div style="background: #e8f5e8; padding: 16px; border-radius: 6px; margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2d5a2d;">🛡️ Phase 2 Safety Features</h4>
-                    <ul style="margin: 0; color: #2d5a2d; font-size: 14px; padding-left: 20px;">
-                        <li><strong>Link Protection:</strong> Never recommend deleting pages with inbound links</li>
-                        <li><strong>Usage Analysis:</strong> Consider page creation dates and publish status</li>
-                        <li><strong>Smart Preservation:</strong> Keep the page that's most integrated into course flow</li>
-                        <li><strong>Manual Override:</strong> You approve every action before execution</li>
-                    </ul>
-                </div>
-                
-                <div style="background: #fff3cd; padding: 16px; border-radius: 6px; margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 8px 0; color: #856404;">🎯 Official Duplicate Handling</h4>
-                    <p style="margin: 0; color: #856404; font-size: 14px;">
-                        For official duplicates (both pages in modules), the system will analyze:
-                        <br>• Which page has more inbound links from assignments, discussions, etc.
-                        <br>• Which page is more recently updated or has better integration
-                        <br>• Usage patterns and accessibility considerations
-                        <br>• <strong>You'll review each recommendation before any deletion</strong>
+                    <h4 style="margin: 0 0 8px 0; color: #2d5a2d;">Safe Analysis Process</h4>
+                    <p style="margin: 0; color: #2d5a2d; font-size: 14px;">
+                        This analysis <strong>will not modify</strong> any content. You'll review all findings 
+                        before deciding which actions to take.
                     </p>
-                </div>
-                
-                <div class="methodology-box">
-                    <h4>Enhanced Technical Methodology</h4>
-                    <p><strong>Phase 2 adds comprehensive link analysis:</strong> Uses Canvas API to map all internal 
-                    links, references in assignments, module items, and navigation. Employs graph analysis to 
-                    determine page importance and integration level. Only recommends deletion of pages that are 
-                    genuinely isolated or properly superseded by better alternatives.</p>
                 </div>
             \`;
         }
@@ -1098,12 +1067,10 @@ function generateEnhancedQADashboard(token) {
             executeTask(taskToExecute); // Use the stored value
         }
 
-        // Main task execution function (Phase 2: Analysis only)
+        // Keep your existing executeTask function - just call it from startAnalysis
         function executeTask(taskId) {
-            console.log('Phase 2: Starting analysis for task:', taskId);
-            currentTaskId = taskId;
+            console.log('Executing task:', taskId);
             
-            // Show progress overlay
             showProgress(taskId);
             
             fetch('/execute', {
@@ -1113,15 +1080,14 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: taskId,
-                    courseId: '280', // Update this with dynamic course ID if needed
-                    userId: currentUserId
+                    courseId: '280',
+                    userId: '${token.sub || 'unknown'}'
                 })
             })
             .then(response => response.json())
             .then(data => {
                 hideProgress();
                 if (data.success) {
-                    currentAnalysisResult = data.result; // Store for later use
                     showResults(taskId, data.result);
                 } else {
                     showError(data.error);
