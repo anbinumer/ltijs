@@ -1013,44 +1013,40 @@ function generateEnhancedQADashboard(token) {
         }
 
         function generateDuplicateAnalysisPreview() {
-            return \`
-                <div class="analysis-scope">
-                    <h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Analysis Scope</h3>
-                    <div class="scope-item">
-                        <span>Content to Analyze:</span>
-                        <strong>All course pages and modules</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Detection Method:</span>
-                        <strong>Content similarity analysis</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Similarity Threshold:</span>
-                        <strong>70% matching content</strong>
-                    </div>
-                    <div class="scope-item">
-                        <span>Estimated Duration:</span>
-                        <strong>2-3 minutes</strong>
-                    </div>
-                </div>
-                
-                <h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">What This Analysis Will Do:</h4>
-                <ol style="margin: 0 0 16px 0; padding-left: 20px; color: var(--canvas-text-light);">
-                    <li>Scan all published and unpublished pages in your course</li>
-                    <li>Compare content using text similarity algorithms</li>
-                    <li>Identify pages with 70% or higher content overlap</li>
-                    <li>Generate a detailed report of findings</li>
-                    <li>Present recommendations for review</li>
-                </ol>
-                
-                <div style="background: #e8f5e8; padding: 16px; border-radius: 6px; margin-bottom: 16px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2d5a2d;">Safe Analysis Process</h4>
-                    <p style="margin: 0; color: #2d5a2d; font-size: 14px;">
-                        This analysis <strong>will not modify</strong> any content. You'll review all findings 
-                        before deciding which actions to take.
-                    </p>
-                </div>
-            \`;
+            return '<div class="analysis-scope">' +
+                '<h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Analysis Scope</h3>' +
+                '<div class="scope-item">' +
+                    '<span>Content to Analyze:</span>' +
+                    '<strong>All course pages and modules</strong>' +
+                '</div>' +
+                '<div class="scope-item">' +
+                    '<span>Detection Method:</span>' +
+                    '<strong>Content similarity analysis</strong>' +
+                '</div>' +
+                '<div class="scope-item">' +
+                    '<span>Similarity Threshold:</span>' +
+                    '<strong>70% matching content</strong>' +
+                '</div>' +
+                '<div class="scope-item">' +
+                    '<span>Estimated Duration:</span>' +
+                    '<strong>2-3 minutes</strong>' +
+                '</div>' +
+            '</div>' +
+            '<h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">What This Analysis Will Do:</h4>' +
+            '<ol style="margin: 0 0 16px 0; padding-left: 20px; color: var(--canvas-text-light);">' +
+                '<li>Scan all published and unpublished pages in your course</li>' +
+                '<li>Compare content using text similarity algorithms</li>' +
+                '<li>Identify pages with 70% or higher content overlap</li>' +
+                '<li>Generate a detailed report of findings</li>' +
+                '<li>Present recommendations for review</li>' +
+            '</ol>' +
+            '<div style="background: #e8f5e8; padding: 16px; border-radius: 6px; margin-bottom: 16px;">' +
+                '<h4 style="margin: 0 0 8px 0; color: #2d5a2d;">Safe Analysis Process</h4>' +
+                '<p style="margin: 0; color: #2d5a2d; font-size: 14px;">' +
+                    'This analysis <strong>will not modify</strong> any content. You\'ll review all findings ' +
+                    'before deciding which actions to take.' +
+                '</p>' +
+            '</div>';
         }
 
         function closePreview() {
