@@ -989,9 +989,12 @@ function generateEnhancedQADashboard(token) {
 
     <script>
         let currentTaskId = null;
+        let currentAnalysisResult = null;
+        let currentUserId = '${token.sub || 'unknown'}';
 
+        // Main function to start analysis (Phase 2)
         function startAnalysis(taskId) {
-            console.log('Starting analysis preview for:', taskId);
+            console.log('Phase 2: Starting analysis preview for:', taskId);
             currentTaskId = taskId;
             showAnalysisPreview(taskId);
         }
@@ -1003,7 +1006,7 @@ function generateEnhancedQADashboard(token) {
             
             // Customize preview based on task type
             if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Duplicate Page Analysis Preview';
+                title.textContent = 'Phase 2: Enhanced Duplicate Analysis Preview';
                 content.innerHTML = generateDuplicateAnalysisPreview();
             }
             
@@ -1095,10 +1098,10 @@ function generateEnhancedQADashboard(token) {
             executeTask(taskToExecute); // Use the stored value
         }
 
+        // Main task execution function (Phase 2: Analysis only)
         function executeTask(taskId) {
             console.log('Phase 2: Starting analysis for task:', taskId);
             currentTaskId = taskId;
-            currentUserId = '${token.sub || 'unknown'}';
             
             // Show progress overlay
             showProgress(taskId);
@@ -1110,7 +1113,7 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: taskId,
-                    courseId: '280', // Update as needed
+                    courseId: '280', // Update this with dynamic course ID if needed
                     userId: currentUserId
                 })
             })
@@ -1138,13 +1141,13 @@ function generateEnhancedQADashboard(token) {
             // Customize progress text based on task
             const progressMessages = {
                 'find-duplicate-pages': {
-                    text: 'Analyzing course content for duplicates...',
-                    details: 'Connecting to Canvas API and retrieving course data'
+                    text: 'Phase 2: Enhanced analysis with link detection...',
+                    details: 'Connecting to Canvas API and mapping content dependencies'
                 }
             };
             
             const message = progressMessages[taskId] || {
-                text: 'Processing analysis...',
+                text: 'Processing enhanced analysis...',
                 details: 'This may take a few moments'
             };
             
@@ -1152,14 +1155,15 @@ function generateEnhancedQADashboard(token) {
             progressDetails.textContent = message.details;
             overlay.classList.add('active');
             
-            // Detailed progress steps
+            // Enhanced progress steps for Phase 2
             let step = 0;
             const steps = [
-                'Retrieving course pages and modules...',
-                'Analyzing content structure and text...',
-                'Comparing pages for similarity patterns...',
-                'Identifying duplicate and near-duplicate content...',
-                'Generating comprehensive analysis report...'
+                'Retrieving course pages, modules, and assignments...',
+                'Analyzing content structure and similarity patterns...',
+                'Mapping inbound links and content dependencies...',
+                'Assessing deletion risks and integration levels...',
+                'Generating smart recommendations and safety analysis...',
+                'Preparing detailed preview report...'
             ];
             
             const progressInterval = setInterval(() => {
@@ -1167,7 +1171,7 @@ function generateEnhancedQADashboard(token) {
                     progressDetails.textContent = steps[step];
                     step++;
                 } else {
-                    progressDetails.textContent = 'Finalizing analysis results...';
+                    progressDetails.textContent = 'Finalizing enhanced analysis results...';
                 }
             }, 3000);
             
@@ -1191,8 +1195,8 @@ function generateEnhancedQADashboard(token) {
             
             // Customize results based on task type
             if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Analysis Complete - Review Findings';
-                content.innerHTML = generateDuplicatePageResults(result);
+                title.textContent = 'Phase 2: Enhanced Analysis Complete - Review Findings';
+                content.innerHTML = generateEnhancedDuplicateResults(result);
             }
             
             container.style.display = 'block';
@@ -1448,44 +1452,15 @@ function generateEnhancedQADashboard(token) {
         }
 
         function showExecutionResults(result) {
-            const container = document.getElementById('resultsContainer');
-            const title = document.getElementById('resultsTitle');
-            const content = document.getElementById('resultsContent');
-            
-            title.textContent = 'Execution Complete - Review Results';
-            content.innerHTML = \`
-                <div style="background: #d4edda; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #28a745;">
-                    <h3 style="margin: 0 0 12px 0; color: #155724;">✅ Execution Summary</h3>
-                    <p style="margin: 0; color: #155724;">
-                        Successfully executed \${result.summary?.actions_completed || 0} out of \${result.summary?.actions_requested || 0} approved actions.
-                        \${result.summary?.actions_failed > 0 ? \`\${result.summary.actions_failed} actions failed.\` : 'All actions completed successfully.'}
-                    </p>
-                </div>
-                
-                <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
-                    <h4 style="margin: 0 0 8px 0;">Execution Results:</h4>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <li><strong>Actions Requested:</strong> \${result.summary?.actions_requested || 0}</li>
-                        <li><strong>Actions Completed:</strong> \${result.summary?.actions_completed || 0}</li>
-                        <li><strong>Actions Failed:</strong> \${result.summary?.actions_failed || 0}</li>
-                        <li><strong>Mode:</strong> \${result.mode || 'execution_complete'}</li>
-                    </ul>
-                </div>
-                
-                <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
-\${JSON.stringify(result, null, 2)}</pre>
-            \`;
-            
-            container.style.display = 'block';
-            container.scrollIntoView({ behavior: 'smooth' });
+            alert('Execution results: ' + JSON.stringify(result, null, 2));
         }
 
         function reviewSafeActions() {
-            alert('Detailed review functionality coming soon!');
+            alert('Detailed review functionality will show individual action details here.');
         }
 
         function showDetailedReview() {
-            alert('Detailed review functionality coming soon!');
+            alert('Detailed manual review interface will be shown here.');
         }
 
         function showError(error) {
