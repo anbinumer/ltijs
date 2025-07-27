@@ -1577,10 +1577,10 @@ const setup = async () => {
     
     console.log('🚀 QA Automation LTI deployed on http://localhost:3000')
     console.log('📋 LTI Configuration URLs (for Canvas Developer Key):')
-    console.log('   - Launch URL: https://dow-singer-swiss-mailed.trycloudflare.com/qa-tools')
-    console.log('   - Login URL: https://dow-singer-swiss-mailed.trycloudflare.com/login') 
-    console.log('   - Keyset URL: https://dow-singer-swiss-mailed.trycloudflare.com/keys')
-    console.log('   - Deep Linking URL: https://dow-singer-swiss-mailed.trycloudflare.com/qa-tools')
+    console.log('   - Launch URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/qa-tools')
+    console.log('   - Login URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/login') 
+    console.log('   - Keyset URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/keys')
+    console.log('   - Deep Linking URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/qa-tools')
     
     // Note: Platform registration will be done after Canvas Developer Key setup
     console.log('\n⏳ Canvas Developer Key setup required before platform registration')
