@@ -357,7 +357,7 @@ class EnhancedDuplicateAnalyzer:
     
     # Canvas API helper methods
     def _get_all_course_pages(self, course_id: str) -> List[Dict]:
-        """Get all pages in the course"""
+        """Get all pages in the course with their full content"""
         if f'pages_{course_id}' in self.page_cache:
             return self.page_cache[f'pages_{course_id}']
         
@@ -367,7 +367,20 @@ class EnhancedDuplicateAnalyzer:
         while url:
             response = requests.get(url, headers=self.headers, params={'per_page': 100})
             response.raise_for_status()
-            pages.extend(response.json())
+            page_list = response.json()
+            
+            # Get full content for each page
+            for page in page_list:
+                try:
+                    page_url = f"{self.base_api_url}/courses/{course_id}/pages/{page['url']}"
+                    page_response = requests.get(page_url, headers=self.headers)
+                    page_response.raise_for_status()
+                    full_page = page_response.json()
+                    pages.append(full_page)
+                except Exception as e:
+                    self.logger.warning(f"Could not get full content for page {page.get('title', 'Unknown')}: {e}")
+                    # Add page with basic info if full content can't be retrieved
+                    pages.append(page)
             
             # Check for next page
             links = response.links
@@ -465,7 +478,7 @@ class EnhancedDuplicateAnalyzer:
         # Convert to lowercase and strip
         return content.lower().strip()
     
-    def run_enhanced_analysis(self, course_id: str, similarity_threshold: float = 0.7) -> Dict:
+    def run_enhanced_analysis(self, course_id: str, similarity_threshold: float = 0.9) -> Dict:
         """
         Run the complete enhanced analysis with inbound link detection.
         
@@ -476,6 +489,33 @@ class EnhancedDuplicateAnalyzer:
         # Get all course pages
         all_pages = self._get_all_course_pages(course_id)
         self.logger.info(f"Found {len(all_pages)} total pages")
+
+        # DEBUG: Log all page titles to see what we're actually analyzing
+        self.logger.info("=== ALL PAGES BEING ANALYZED ===")
+        for i, page in enumerate(all_pages[:20]):  # Show first 20 pages
+            self.logger.info(f"Page {i+1}: '{page.get('title', 'NO TITLE')}' (URL: {page.get('url', 'NO URL')})")
+        if len(all_pages) > 20:
+            self.logger.info(f"... and {len(all_pages) - 20} more pages")
+        self.logger.info("=== END PAGE LIST ===")
+
+        # DEBUG: Check for pages with similar titles
+        similar_titles = {}
+        for page in all_pages:
+            title = page.get('title', '')
+            base_title = title.replace('-2', '').replace(' Copy', '').replace('-Copy', '')
+            if base_title not in similar_titles:
+                similar_titles[base_title] = []
+            similar_titles[base_title].append(page)
+
+        # Log pages with similar base titles
+        self.logger.info("=== PAGES WITH SIMILAR TITLES ===")
+        for base_title, pages in similar_titles.items():
+            if len(pages) > 1:
+                self.logger.info(f"Base title '{base_title}' has {len(pages)} variations:")
+                for page in pages:
+                    content_length = len(page.get('body', '') or '')
+                    self.logger.info(f"  - '{page.get('title')}' (Content: {content_length} chars)")
+        self.logger.info("=== END SIMILAR TITLES ===")
         
         # Find duplicates using content similarity
         duplicates = []
@@ -494,6 +534,10 @@ class EnhancedDuplicateAnalyzer:
                     page1.get('body', ''), 
                     page2.get('body', '')
                 )
+                
+                # DEBUG: Log high similarity pairs (even if below threshold)
+                if similarity > 0.5:  # Log any pairs with >50% similarity for debugging
+                    self.logger.info(f"Similarity check: '{page1['title']}' vs '{page2['title']}' = {similarity:.1%}")
                 
                 if similarity >= similarity_threshold:
                     self.logger.info(f"Found duplicate pair: {page1['title']} <-> {page2['title']} ({similarity:.1%})")
@@ -667,7 +711,7 @@ def main():
     parser.add_argument('--canvas-url', required=True, help='Canvas instance URL')
     parser.add_argument('--api-token', required=True, help='Canvas API token')
     parser.add_argument('--course-id', required=True, help='Course ID to analyze')
-    parser.add_argument('--similarity-threshold', type=float, default=0.7, 
+    parser.add_argument('--similarity-threshold', type=float, default=0.9, 
                        help='Similarity threshold (0.0-1.0)')
     parser.add_argument('--analyze-only', action='store_true', 
                        help='Only analyze, do not execute any deletions')

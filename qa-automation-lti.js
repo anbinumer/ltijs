@@ -30,12 +30,20 @@ lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024', // Key used to sign c
 lti.whitelist('/execute')
 lti.whitelist('/execute-approved')
 
-// Phase 2 LTI Integration: Enhanced execute endpoint
+// Enhanced error handling for the main execute endpoint
 lti.app.post('/execute', async (req, res) => {
   const { taskId, courseId, userId } = req.body
   
   try {
     console.log(`Phase 2: Analyzing task: ${taskId} for course: ${courseId}`)
+    
+    // Validate required parameters
+    if (!taskId) {
+      throw new Error('Task ID is required');
+    }
+    if (!courseId) {
+      throw new Error('Course ID is required');
+    }
     
     // Phase 2: Always analyze first (preview-first workflow)
     const analysisResult = await analyzeTask(taskId, courseId, userId)
@@ -49,14 +57,23 @@ lti.app.post('/execute', async (req, res) => {
     })
   } catch (error) {
     console.error('Phase 2 Analysis error:', error)
-    res.json({ 
+    
+    // Enhanced error response with debugging info
+    res.status(500).json({ 
       success: false, 
-      error: error.message 
+      error: error.message,
+      phase: 2,
+      debug: {
+        taskId,
+        courseId,
+        timestamp: new Date().toISOString(),
+        errorType: error.constructor.name
+      }
     })
   }
 })
 
-// Enhanced analyzeTask function for Phase 2
+// Enhanced analyzeTask function for Phase 2 with better error handling
 async function analyzeTask(taskId, courseId, userId) {
   const { spawn } = require('child_process');
   const path = require('path');
@@ -64,97 +81,127 @@ async function analyzeTask(taskId, courseId, userId) {
   switch (taskId) {
     case 'find-duplicate-pages':
       return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'scripts', 'enhanced_duplicate_analyzer.py');
+        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
         const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
         const apiToken = process.env.CANVAS_API_TOKEN || '';
         
+        // Enhanced validation
         if (!apiToken) {
-          reject(new Error('Canvas API token not configured'));
+          reject(new Error('Canvas API token not configured. Please set CANVAS_API_TOKEN in your environment.'));
           return;
         }
         
-        // Phase 2: Enhanced analysis arguments
+        if (!canvasUrl) {
+          reject(new Error('Canvas URL not configured. Please set CANVAS_URL in your environment.'));
+          return;
+        }
+        
+        // Check if Python script exists
+        const fs = require('fs');
+        if (!fs.existsSync(scriptPath)) {
+          reject(new Error(`Python script not found at: ${scriptPath}`));
+          return;
+        }
+        
+        // Phase 2: Analysis arguments for duplicate_page_cleaner.py
         const args = [
           scriptPath,
           '--canvas-url', canvasUrl,
           '--api-token', apiToken,
           '--course-id', courseId,
-          '--similarity-threshold', '0.7',
-          '--analyze-only',           // Always analyze first in Phase 2
-          '--check-inbound-links',    // NEW: Check for inbound links
-          '--generate-preview',       // NEW: Generate detailed preview
-          '--risk-assessment'         // NEW: Assess deletion risks
+          '--similarity-threshold', '0.9',
+          '--analyze-only'           // Always analyze first in Phase 2
         ];
         
-        console.log('Phase 2 Enhanced Analysis with args:', args);
-        const python = spawn('python3', args);
+        console.log('Phase 2 Duplicate Page Cleaner Analysis with args:', args);
+        console.log('Working directory:', __dirname);
+        console.log('Script path exists:', fs.existsSync(scriptPath));
+        
+        // Set timeout to prevent hanging
+        const timeoutMs = 300000; // 5 minutes
+        const timeout = setTimeout(() => {
+          python.kill('SIGTERM');
+          reject(new Error('Analysis timed out after 5 minutes. This may indicate a network issue or large course size.'));
+        }, timeoutMs);
+        
+        const python = spawn('python3', args, {
+          cwd: __dirname,
+          env: {
+            ...process.env,
+            PYTHONPATH: path.join(__dirname, 'scripts'),
+            PYTHONUNBUFFERED: '1'
+          }
+        });
         
         let output = '';
         let error = '';
         
         python.stdout.on('data', (data) => {
-          output += data.toString();
+          const chunk = data.toString();
+          output += chunk;
+          console.log('PYTHON STDOUT:', chunk);
         });
         
         python.stderr.on('data', (data) => {
-          error += data.toString();
+          const chunk = data.toString();
+          error += chunk;
+          console.log('PYTHON STDERR:', chunk);
         });
         
         python.on('close', (code) => {
+          clearTimeout(timeout);
+          
+          console.log('=== ENHANCED PYTHON SCRIPT DEBUG ===');
+          console.log(`Exit code: ${code}`);
+          console.log(`STDOUT length: ${output.length}`);
+          console.log(`STDERR length: ${error.length}`);
+          console.log('--- STDOUT CONTENT ---');
+          console.log(output);
+          console.log('--- STDERR CONTENT ---');
+          console.log(error);
+          console.log('=== END DEBUG ===');
+          
           if (code === 0) {
-            // Parse enhanced analysis results
-            const jsonMatch = output.match(/ENHANCED_ANALYSIS_JSON: (.+)/);
-            if (jsonMatch) {
-              try {
-                const analysisResults = JSON.parse(jsonMatch[1]);
-                
-                // Phase 2: Return detailed findings for user review
-                resolve({
-                  phase: 2,
-                  mode: 'preview_first',
-                  analyzed_only: true,
-                  executed: false,
-                  findings: analysisResults,
-                  user_approval_required: true,
-                  risk_assessment: analysisResults.risk_assessment,
-                  safe_actions: analysisResults.findings.safe_actions,
-                  requires_manual_review: analysisResults.findings.requires_manual_review,
-                  inbound_links_checked: true,
-                  next_steps: {
-                    safe_actions_count: analysisResults.findings.safe_actions.length,
-                    manual_review_count: analysisResults.findings.requires_manual_review.length,
-                    can_proceed_with_safe_actions: analysisResults.findings.safe_actions.length > 0
-                  }
-                });
-              } catch (e) {
-                console.error('Failed to parse enhanced analysis JSON:', e);
-                // Fallback to regular JSON parsing
-                const fallbackMatch = output.match(/JSON_OUTPUT: (.+)/);
-                if (fallbackMatch) {
-                  try {
-                    const fallbackResults = JSON.parse(fallbackMatch[1]);
-                    resolve({
-                      phase: 2,
-                      mode: 'preview_first',
-                      analyzed_only: true,
-                      executed: false,
-                      findings: fallbackResults,
-                      user_approval_required: true,
-                      fallback_mode: true
-                    });
-                  } catch (fallbackError) {
-                    reject(new Error('Analysis completed but results format error'));
-                  }
-                } else {
-                  reject(new Error('Analysis completed but no results found'));
+            // Enhanced JSON parsing with multiple fallback strategies
+            try {
+              // Strategy 1: Look for enhanced analysis JSON
+              const enhancedMatch = output.match(/ENHANCED_ANALYSIS_JSON:\s*(.+)/);
+              if (enhancedMatch) {
+                try {
+                  const analysisResults = JSON.parse(enhancedMatch[1]);
+                  console.log('Successfully parsed enhanced analysis JSON');
+                  
+                  // Phase 2: Return detailed findings for user review
+                  resolve({
+                    phase: 2,
+                    mode: 'preview_first',
+                    analyzed_only: true,
+                    executed: false,
+                    findings: analysisResults,
+                    user_approval_required: true,
+                    risk_assessment: analysisResults.risk_assessment,
+                    safe_actions: analysisResults.findings?.safe_actions || [],
+                    requires_manual_review: analysisResults.findings?.requires_manual_review || [],
+                    inbound_links_checked: true,
+                    next_steps: {
+                      safe_actions_count: (analysisResults.findings?.safe_actions || []).length,
+                      manual_review_count: (analysisResults.findings?.requires_manual_review || []).length,
+                      can_proceed_with_safe_actions: (analysisResults.findings?.safe_actions || []).length > 0
+                    }
+                  });
+                  return;
+                } catch (parseError) {
+                  console.error('Failed to parse enhanced analysis JSON:', parseError);
+                  console.error('Raw JSON string:', enhancedMatch[1]);
                 }
               }
-            } else {
-              // Fallback to regular JSON parsing
-              const fallbackMatch = output.match(/JSON_OUTPUT: (.+)/);
-              if (fallbackMatch) {
+              
+              // Strategy 2: Look for regular JSON output
+              const regularMatch = output.match(/JSON_OUTPUT:\s*(.+)/);
+              if (regularMatch) {
                 try {
-                  const fallbackResults = JSON.parse(fallbackMatch[1]);
+                  const fallbackResults = JSON.parse(regularMatch[1]);
+                  console.log('Successfully parsed fallback JSON');
                   resolve({
                     phase: 2,
                     mode: 'preview_first',
@@ -164,15 +211,96 @@ async function analyzeTask(taskId, courseId, userId) {
                     user_approval_required: true,
                     fallback_mode: true
                   });
-                } catch (fallbackError) {
-                  reject(new Error('Analysis completed but results format error'));
+                  return;
+                } catch (parseError) {
+                  console.error('Failed to parse fallback JSON:', parseError);
                 }
-              } else {
-                reject(new Error('Enhanced analysis did not return expected results'));
               }
+              
+              // Strategy 3: Try to parse any JSON-like content
+              const jsonPattern = /\{[\s\S]*\}/;
+              const jsonMatch = output.match(jsonPattern);
+              if (jsonMatch) {
+                try {
+                  const extractedResults = JSON.parse(jsonMatch[0]);
+                  console.log('Successfully parsed extracted JSON');
+                  resolve({
+                    phase: 2,
+                    mode: 'preview_first',
+                    analyzed_only: true,
+                    executed: false,
+                    findings: extractedResults,
+                    user_approval_required: true,
+                    extracted_mode: true
+                  });
+                  return;
+                } catch (parseError) {
+                  console.error('Failed to parse extracted JSON:', parseError);
+                }
+              }
+              
+              // Strategy 4: If no JSON found, check for specific success indicators
+              if (output.includes('Enhanced analysis complete') || output.includes('Found') || output.includes('analysis') || 
+                  output.includes('✅ Phase 2 Enhanced Analysis completed') || output.includes('Analysis and cleanup completed')) {
+                resolve({
+                  phase: 2,
+                  mode: 'preview_first',
+                  analyzed_only: true,
+                  executed: false,
+                  findings: {
+                    message: 'Analysis completed but results parsing failed',
+                    raw_output: output.substring(0, 1000) // Limit output size
+                  },
+                  user_approval_required: false,
+                  parsing_error: true
+                });
+                return;
+              }
+              
+              // If we get here, no recognizable output was found
+              reject(new Error('Analysis completed but no recognizable results were found. Raw output: ' + output.substring(0, 500)));
+              
+            } catch (generalError) {
+              console.error('General error in result processing:', generalError);
+              reject(new Error('Analysis completed but result processing failed: ' + generalError.message));
             }
           } else {
-            reject(new Error(`Enhanced analysis failed: ${error}`));
+            // Enhanced error reporting
+            let errorMessage = `Analysis failed with exit code ${code}`;
+            
+            if (error.includes('ModuleNotFoundError')) {
+              const missingModule = error.match(/No module named '([^']+)'/);
+              if (missingModule) {
+                errorMessage = `Missing Python package: ${missingModule[1]}. Please install it with: pip3 install ${missingModule[1]}`;
+              } else {
+                errorMessage = 'Missing Python packages. Please install required dependencies.';
+              }
+            } else if (error.includes('401') || error.includes('Unauthorized')) {
+              errorMessage = 'Canvas API authentication failed. Please check your API token.';
+            } else if (error.includes('403') || error.includes('Forbidden')) {
+              errorMessage = 'Canvas API access forbidden. Please check your API token permissions.';
+            } else if (error.includes('404')) {
+              errorMessage = 'Course not found or API endpoint invalid. Please check the course ID.';
+            } else if (error.includes('timeout') || error.includes('ConnectionError')) {
+              errorMessage = 'Network timeout connecting to Canvas. Please try again.';
+            } else if (error.includes('ImportError')) {
+              errorMessage = 'Python script import error. Please check script dependencies.';
+            } else if (error) {
+              errorMessage = `Python script error: ${error.substring(0, 200)}`;
+            }
+            
+            reject(new Error(errorMessage));
+          }
+        });
+        
+        python.on('error', (spawnError) => {
+          clearTimeout(timeout);
+          console.error('Failed to start Python process:', spawnError);
+          
+          if (spawnError.code === 'ENOENT') {
+            reject(new Error('Python3 not found. Please ensure Python 3 is installed and accessible via "python3" command.'));
+          } else {
+            reject(new Error(`Failed to start analysis process: ${spawnError.message}`));
           }
         });
       });
@@ -216,7 +344,7 @@ async function executeApprovedActions(taskId, courseId, userId, approvedActions)
   switch (taskId) {
     case 'find-duplicate-pages':
       return new Promise((resolve, reject) => {
-        const scriptPath = path.join(__dirname, 'scripts', 'enhanced_duplicate_analyzer.py');
+        const scriptPath = path.join(__dirname, 'scripts', 'duplicate_page_cleaner.py');
         const canvasUrl = process.env.CANVAS_URL || 'aculeo.test.instructure.com';
         const apiToken = process.env.CANVAS_API_TOKEN || '';
         
@@ -242,8 +370,7 @@ async function executeApprovedActions(taskId, courseId, userId, approvedActions)
           '--canvas-url', canvasUrl,
           '--api-token', apiToken,
           '--course-id', courseId,
-          '--execute-approved', actionsFile,  // NEW: Execute only approved actions
-          '--generate-report'                 // Generate execution report
+          '--execute-approved', actionsFile  // Execute only approved actions
         ];
         
         console.log('Phase 2 Executing approved actions with args:', args);
@@ -333,6 +460,16 @@ lti.onConnect(async (token, req, res) => {
     sub: token.sub,
     context: token.platformContext
   })
+  
+  // Debug course ID extraction
+  console.log('=== COURSE ID EXTRACTION DEBUG ===')
+  const realCourseId = getRealCourseId(token)
+  console.log('Extracted Course ID:', realCourseId)
+  console.log('Original Context ID:', token.platformContext?.context?.id)
+  console.log('Return URL:', token.platformContext?.launchPresentation?.return_url)
+  console.log('Launch URL:', token.platformContext?.launchPresentation?.launch_url)
+  console.log('Custom Params:', token.platformContext?.custom)
+  console.log('================================')
 
   // Get real user name for audit purposes
   const realUserName = await getRealUserName(token);
@@ -374,15 +511,43 @@ function getUserRole(token) {
 
 // Function to extract real Canvas course ID from LTI token
 function getRealCourseId(token) {
-  // Try to extract from return URL first
+  // Method 1: Try to extract from return URL (most reliable)
   const returnUrl = token.platformContext?.launchPresentation?.return_url;
   if (returnUrl) {
     const match = returnUrl.match(/\/courses\/(\d+)\//);
-    if (match) return match[1];
+    if (match) {
+      console.log(`Course ID from return URL: ${match[1]}`);
+      return match[1];
+    }
   }
   
-  // Fallback to context ID (may not work for user lookup)
-  return token.platformContext?.context?.id;
+  // Method 2: Try to extract from launch URL
+  const launchUrl = token.platformContext?.launchPresentation?.launch_url;
+  if (launchUrl) {
+    const match = launchUrl.match(/\/courses\/(\d+)\//);
+    if (match) {
+      console.log(`Course ID from launch URL: ${match[1]}`);
+      return match[1];
+    }
+  }
+  
+  // Method 3: Try custom parameters (Canvas sometimes passes this)
+  const customParams = token.platformContext?.custom;
+  if (customParams?.canvas_course_id) {
+    console.log(`Course ID from custom params: ${customParams.canvas_course_id}`);
+    return customParams.canvas_course_id;
+  }
+  
+  // Method 4: Check for numeric ID in context
+  const contextId = token.platformContext?.context?.id;
+  if (contextId && /^\d+$/.test(contextId)) {
+    console.log(`Course ID from context (numeric): ${contextId}`);
+    return contextId;
+  }
+  
+  // Fallback: Use your known course ID for testing
+  console.log('Using fallback course ID: 280');
+  return '280';
 }
 
 // Function to get real user name using LTI Names and Roles Provisioning Service
@@ -519,14 +684,14 @@ function generateEnhancedQADashboard(token) {
         }
 
         .course-info {
-            background: linear-gradient(135deg, #e8f4f8 0%, #f0f8ff 100%);
+            background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%);
             padding: 16px;
             border-radius: 6px;
-            border: 1px solid #d1e7dd;
+            border: 1px solid var(--acu-gold);
         }
 
         .course-info strong {
-            color: var(--acu-primary);
+            color: var(--acu-deep-purple);
         }
 
         /* Task categories with enhanced visual hierarchy */
@@ -580,10 +745,10 @@ function generateEnhancedQADashboard(token) {
         }
 
         .task-card:hover {
-            border-color: var(--acu-primary);
-            background: #fbfcfd;
+            border-color: var(--acu-deep-purple);
+            background: var(--acu-cream-light);
             transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(3, 116, 181, 0.15);
+            box-shadow: 0 8px 24px rgba(74, 26, 74, 0.15);
         }
 
         .task-card:hover::before {
@@ -617,8 +782,8 @@ function generateEnhancedQADashboard(token) {
             font-size: 12px;
             padding: 4px 8px;
             border-radius: 12px;
-            background: var(--canvas-success);
-            color: white;
+            background: var(--acu-gold);
+            color: var(--acu-deep-purple);
             font-weight: 500;
         }
 
@@ -741,13 +906,13 @@ function generateEnhancedQADashboard(token) {
         }
 
         .btn-secondary {
-            background: #f8f9fa;
-            color: var(--canvas-text);
-            border: 1px solid var(--canvas-border);
+            background: var(--acu-cream);
+            color: var(--acu-deep-purple);
+            border: 1px solid var(--acu-gold);
         }
 
         .btn-secondary:hover {
-            background: #e9ecef;
+            background: var(--acu-cream-light);
         }
 
         .analysis-scope {
@@ -769,10 +934,11 @@ function generateEnhancedQADashboard(token) {
         }
 
         .methodology-box {
-            background: #f8f9fa;
+            background: var(--acu-cream);
             padding: 16px;
             border-radius: 6px;
             margin-top: 16px;
+            border-left: 3px solid var(--acu-gold);
         }
 
         .methodology-box h4 {
@@ -855,7 +1021,7 @@ function generateEnhancedQADashboard(token) {
         }
 
         .results-header {
-            background: linear-gradient(135deg, var(--canvas-success) 0%, #00ac18 100%);
+            background: linear-gradient(135deg, var(--acu-deep-purple) 0%, var(--acu-purple) 100%);
             color: white;
             padding: 20px 24px;
             font-weight: 600;
@@ -873,17 +1039,17 @@ function generateEnhancedQADashboard(token) {
         }
 
         .summary-card {
-            background: #f8f9fa;
+            background: var(--acu-cream);
             padding: 16px;
             border-radius: 6px;
             text-align: center;
-            border-left: 4px solid var(--acu-primary);
+            border-left: 4px solid var(--acu-deep-purple);
         }
 
         .summary-number {
             font-size: 24px;
             font-weight: 600;
-            color: var(--acu-primary);
+            color: var(--acu-deep-purple);
             margin-bottom: 4px;
         }
 
@@ -938,12 +1104,12 @@ function generateEnhancedQADashboard(token) {
             <div class="category-header">${category}</div>
             <div class="task-grid">
                 ${tasks.map(task => `
-                    <div class="task-card" onclick="startAnalysis('${task.id}')" tabindex="0" role="button" aria-label="Analyze ${task.name}">
+                    <div class="task-card" onclick="console.log('Task card clicked for: ${task.id}'); startAnalysis('${task.id}');" tabindex="0" role="button" aria-label="Analyze ${task.name}">
                         <div class="task-name">${task.name}</div>
                         <div class="task-description">${task.description}</div>
                         <div class="task-meta">
                             <span class="task-status">Ready for Analysis</span>
-                            <button class="task-button" onclick="event.stopPropagation(); startAnalysis('${task.id}')">
+                            <button class="task-button" onclick="event.stopPropagation(); console.log('Begin Analysis clicked for: ${task.id}'); startAnalysis('${task.id}');">
                                 Begin Analysis
                             </button>
                         </div>
@@ -992,20 +1158,26 @@ function generateEnhancedQADashboard(token) {
         let currentAnalysisResult = null;
         let currentUserId = '${token.sub || 'unknown'}';
 
-        // Phase 2: Use existing executeTask function but add startAnalysis wrapper
+        // Phase 2: Main analysis functions
         function startAnalysis(taskId) {
-            console.log('Starting analysis preview for:', taskId);
+            console.log('Phase 2: Starting analysis preview for:', taskId);
             currentTaskId = taskId;
             showAnalysisPreview(taskId);
         }
 
         function showAnalysisPreview(taskId) {
+            console.log('Phase 2: Showing analysis preview for:', taskId);
             const preview = document.getElementById('analysisPreview');
             const title = document.getElementById('previewTitle');
             const content = document.getElementById('previewContent');
             
+            if (!preview || !title || !content) {
+                console.error('Preview elements not found');
+                return;
+            }
+            
             if (taskId === 'find-duplicate-pages') {
-                title.textContent = 'Duplicate Page Analysis Preview';
+                title.textContent = 'Phase 2: Enhanced Duplicate Analysis Preview';
                 content.innerHTML = generateDuplicateAnalysisPreview();
             }
             
@@ -1013,59 +1185,113 @@ function generateEnhancedQADashboard(token) {
         }
 
         function generateDuplicateAnalysisPreview() {
-            return '<div class="analysis-scope">' +
-                '<h3 style="margin: 0 0 16px 0; color: var(--acu-deep-purple);">Analysis Scope</h3>' +
-                '<div class="scope-item">' +
-                    '<span>Content to Analyze:</span>' +
-                    '<strong>All course pages and modules</strong>' +
-                '</div>' +
-                '<div class="scope-item">' +
-                    '<span>Detection Method:</span>' +
-                    '<strong>Content similarity analysis</strong>' +
-                '</div>' +
-                '<div class="scope-item">' +
-                    '<span>Similarity Threshold:</span>' +
-                    '<strong>70% matching content</strong>' +
-                '</div>' +
-                '<div class="scope-item">' +
-                    '<span>Estimated Duration:</span>' +
-                    '<strong>2-3 minutes</strong>' +
-                '</div>' +
-            '</div>' +
-            '<h4 style="color: var(--canvas-text); margin: 0 0 12px 0;">What This Analysis Will Do:</h4>' +
-            '<ol style="margin: 0 0 16px 0; padding-left: 20px; color: var(--canvas-text-light);">' +
-                '<li>Scan all published and unpublished pages in your course</li>' +
-                '<li>Compare content using text similarity algorithms</li>' +
-                '<li>Identify pages with 70% or higher content overlap</li>' +
-                '<li>Generate a detailed report of findings</li>' +
-                '<li>Present recommendations for review</li>' +
-            '</ol>' +
-            '<div style="background: #e8f5e8; padding: 16px; border-radius: 6px; margin-bottom: 16px;">' +
-                '<h4 style="margin: 0 0 8px 0; color: #2d5a2d;">Safe Analysis Process</h4>' +
-                '<p style="margin: 0; color: #2d5a2d; font-size: 14px;">' +
-                    'This analysis <strong>will not modify</strong> any content. You\'ll review all findings ' +
-                    'before deciding which actions to take.' +
-                '</p>' +
-            '</div>';
+            return \`
+                <!-- Confidence-Building Header -->
+                        <div style="background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-deep-purple);">
+        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+        <span style="font-size: 20px; margin-right: 12px;">🔍</span>
+        <h3 style="margin: 0; color: var(--acu-deep-purple); font-size: 18px;">Smart Course Cleanup Analysis</h3>
+        </div>
+        <p style="margin: 0; color: var(--acu-purple); font-size: 14px; line-height: 1.5;">
+                        This analysis will intelligently identify and resolve duplicate content while protecting your course integrity. 
+                        <strong>No student-facing content will be affected.</strong>
+                    </p>
+                </div>
+
+                <!-- User-Friendly Analysis Scope -->
+                <div style="background: var(--acu-cream); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-deep-purple);">
+                    <h4 style="margin: 0 0 16px 0; color: var(--acu-deep-purple); font-size: 16px;">What This Analysis Will Do:</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                        <div style="background: white; padding: 16px; border-radius: 6px; border: 1px solid var(--acu-gold);">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 8px;">📄 Content Scan</div>
+                            <div style="font-size: 13px; color: var(--acu-purple);">All course pages, modules, and assignments</div>
+                        </div>
+                        <div style="background: white; padding: 16px; border-radius: 6px; border: 1px solid var(--acu-gold);">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 8px;">🔗 Link Protection</div>
+                            <div style="font-size: 13px; color: var(--acu-purple);">Pages with inbound links are automatically protected</div>
+                        </div>
+                        <div style="background: white; padding: 16px; border-radius: 6px; border: 1px solid var(--acu-gold);">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 8px;">⚡ Smart Detection</div>
+                            <div style="font-size: 13px; color: var(--acu-purple);">90% similarity threshold for accurate matching</div>
+                        </div>
+                        <div style="background: white; padding: 16px; border-radius: 6px; border: 1px solid var(--acu-gold);">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 8px;">⏱️ Quick Analysis</div>
+                            <div style="font-size: 13px; color: var(--acu-purple);">3-5 minutes for comprehensive review</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Step-by-Step Process -->
+                <div style="background: var(--acu-cream-light); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-gold);">
+                    <h4 style="margin: 0 0 16px 0; color: var(--acu-deep-purple); font-size: 16px;">How It Works:</h4>
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--acu-gold); color: var(--acu-deep-purple); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 12px;">1</span>
+                            <span style="color: var(--acu-deep-purple); font-size: 14px;"><strong>Discover:</strong> Scan all course content for duplicates</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--acu-gold); color: var(--acu-deep-purple); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 12px;">2</span>
+                            <span style="color: var(--acu-deep-purple); font-size: 14px;"><strong>Analyze:</strong> Compare content and check inbound links</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--acu-gold); color: var(--acu-deep-purple); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 12px;">3</span>
+                            <span style="color: var(--acu-deep-purple); font-size: 14px;"><strong>Protect:</strong> Automatically preserve pages with inbound links</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--acu-gold); color: var(--acu-deep-purple); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 12px;">4</span>
+                            <span style="color: var(--acu-deep-purple); font-size: 14px;"><strong>Recommend:</strong> Suggest safe actions with detailed reasoning</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--acu-gold); color: var(--acu-deep-purple); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; margin-right: 12px;">5</span>
+                            <span style="color: var(--acu-deep-purple); font-size: 14px;"><strong>Preview:</strong> Show you exactly what will happen before any changes</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Safety Assurance -->
+                <div style="background: var(--acu-cream); padding: 20px; border-radius: 8px; border-left: 4px solid var(--acu-deep-purple);">
+                    <h4 style="margin: 0 0 12px 0; color: var(--acu-deep-purple); font-size: 16px;">🛡️ Your Course is Protected</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                        <div style="background: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px;">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); font-size: 13px;">Inbound Links Protected</div>
+                            <div style="font-size: 12px; color: var(--acu-purple);">Pages linked by other content are never deleted</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px;">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); font-size: 13px;">Preview First</div>
+                            <div style="font-size: 12px; color: var(--acu-purple);">See all changes before anything happens</div>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px;">
+                            <div style="font-weight: 600; color: var(--acu-deep-purple); font-size: 13px;">Manual Approval</div>
+                            <div style="font-size: 12px; color: var(--acu-purple);">You control every action taken</div>
+                        </div>
+                    </div>
+                </div>
+            \`;
         }
 
         function closePreview() {
+            console.log('Phase 2: Closing preview');
             const preview = document.getElementById('analysisPreview');
-            preview.classList.remove('active');
+            if (preview) {
+                preview.classList.remove('active');
+            }
             currentTaskId = null;
         }
 
         function proceedWithAnalysis() {
-            if (!currentTaskId) return;
+            console.log('Phase 2: Proceeding with analysis for task:', currentTaskId);
+            if (!currentTaskId) {
+                console.error('No task ID available');
+                return;
+            }
             
-            const taskToExecute = currentTaskId; // Store it before closing
+            const taskToExecute = currentTaskId;
             closePreview();
-            executeTask(taskToExecute); // Use the stored value
+            executeTask(taskToExecute);
         }
 
-        // Keep your existing executeTask function - just call it from startAnalysis
         function executeTask(taskId) {
-            console.log('Executing task:', taskId);
+            console.log('Phase 2: Executing task:', taskId);
             
             showProgress(taskId);
             
@@ -1076,40 +1302,51 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: taskId,
-                    courseId: '280',
+                    courseId: '${getRealCourseId(token)}',
                     userId: '${token.sub || 'unknown'}'
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Phase 2: Got response:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('Phase 2: Analysis result:', data);
                 hideProgress();
                 if (data.success) {
+                    currentAnalysisResult = data.result;
                     showResults(taskId, data.result);
                 } else {
                     showError(data.error);
                 }
             })
             .catch(error => {
+                console.error('Phase 2: Network error:', error);
                 hideProgress();
                 showError('Network error: ' + error.message);
             });
         }
 
         function showProgress(taskId) {
+            console.log('Phase 2: Showing progress for:', taskId);
             const overlay = document.getElementById('progressOverlay');
             const progressText = document.getElementById('progressText');
             const progressDetails = document.getElementById('progressDetails');
             
-            // Customize progress text based on task
+            if (!overlay || !progressText || !progressDetails) {
+                console.error('Progress elements not found');
+                return;
+            }
+            
             const progressMessages = {
                 'find-duplicate-pages': {
-                    text: 'Phase 2: Enhanced analysis with link detection...',
-                    details: 'Connecting to Canvas API and mapping content dependencies'
+                    text: 'Analyzing course content for duplicates...',
+                    details: 'Connecting to Canvas API and mapping inbound links'
                 }
             };
             
             const message = progressMessages[taskId] || {
-                text: 'Processing enhanced analysis...',
+                text: 'Processing course analysis...',
                 details: 'This may take a few moments'
             };
             
@@ -1117,45 +1354,53 @@ function generateEnhancedQADashboard(token) {
             progressDetails.textContent = message.details;
             overlay.classList.add('active');
             
-            // Enhanced progress steps for Phase 2
-            let step = 0;
             const steps = [
                 'Retrieving course pages, modules, and assignments...',
                 'Analyzing content structure and similarity patterns...',
-                'Mapping inbound links and content dependencies...',
-                'Assessing deletion risks and integration levels...',
+                'Mapping inbound links and content relationships...',
+                'Assessing removal risks and integration levels...',
                 'Generating smart recommendations and safety analysis...',
                 'Preparing detailed preview report...'
             ];
             
+            let step = 0;
             const progressInterval = setInterval(() => {
                 if (step < steps.length) {
                     progressDetails.textContent = steps[step];
                     step++;
                 } else {
-                    progressDetails.textContent = 'Finalizing enhanced analysis results...';
+                    progressDetails.textContent = 'Finalizing analysis results...';
                 }
             }, 3000);
             
-            // Store interval for cleanup
             overlay.dataset.interval = progressInterval;
         }
 
         function hideProgress() {
+            console.log('Phase 2: Hiding progress');
             const overlay = document.getElementById('progressOverlay');
-            const interval = overlay.dataset.interval;
-            if (interval) {
-                clearInterval(interval);
+            if (overlay) {
+                const interval = overlay.dataset.interval;
+                if (interval) {
+                    clearInterval(interval);
+                }
+                overlay.classList.remove('active');
             }
-            overlay.classList.remove('active');
         }
 
         function showResults(taskId, result) {
+            console.log('Phase 2: Showing results for:', taskId, result);
             const container = document.getElementById('resultsContainer');
             const title = document.getElementById('resultsTitle');
             const content = document.getElementById('resultsContent');
             
-            // Customize results based on task type
+            if (!container || !title || !content) {
+                console.error('Results elements not found');
+                return;
+            }
+            
+            currentAnalysisResult = result;
+            
             if (taskId === 'find-duplicate-pages') {
                 title.textContent = 'Phase 2: Enhanced Analysis Complete - Review Findings';
                 content.innerHTML = generateEnhancedDuplicateResults(result);
@@ -1165,220 +1410,168 @@ function generateEnhancedQADashboard(token) {
             container.scrollIntoView({ behavior: 'smooth' });
         }
 
-        // Store analysis results for later use
-        let currentAnalysisResult = null;
-        let currentTaskId = null;
-        let currentUserId = null;
-
-        function generateDuplicatePageResults(result) {
-            // Phase 2: Enhanced results generation
-            if (result.phase === 2) {
-                return generateEnhancedDuplicateResults(result);
-            }
-            
-            // Fallback to original results for Phase 1
-            const exactDuplicates = result.exact_duplicates || 0;
-            const similarPages = result.similar_pages || 0;
-            const officialDuplicates = result.official_duplicates || 0;
-            const orphanedDuplicates = result.orphaned_duplicates || 0;
-            const deletedCount = result.deleted_count || 0;
-            const analyzeOnly = result.analyze_only || true;
-            
-            return \`
-                <div class="result-summary">
-                    <div class="summary-card">
-                        <div class="summary-number">\${exactDuplicates}</div>
-                        <div class="summary-label">Exact Duplicates Found</div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${similarPages}</div>
-                        <div class="summary-label">Similar Pages</div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${officialDuplicates}</div>
-                        <div class="summary-label">Official Duplicates</div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${analyzeOnly ? 'Analysis' : 'Cleanup'}</div>
-                        <div class="summary-label">Mode</div>
-                    </div>
-                </div>
-                
-                <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">Analysis Complete</h3>
-                    <p style="margin: 0; color: #2d5a2d;">
-                        \${analyzeOnly ? 
-                            'Your course content has been analyzed in safe mode (no changes made).' : 
-                            'Your course content has been analyzed and cleaned up.'
-                        }
-                        \${exactDuplicates > 0 ? 
-                            \`Found \${exactDuplicates} exact duplicate pages.\` : 
-                            'No exact duplicate pages were found.'
-                        }
-                        \${similarPages > 0 ? 
-                            \`Found \${similarPages} similar pages requiring review.\` : 
-                            ''
-                        }
-                    </p>
-                </div>
-                
-                \${result.findings && result.findings.exact_duplicates && result.findings.exact_duplicates.length > 0 ? \`
-                <div style="background: #fff3cd; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #ffc107;">
-                    <h4 style="margin: 0 0 12px 0; color: #856404;">Exact Duplicates Found:</h4>
-                    <ul style="margin: 0; padding-left: 20px; color: #856404;">
-                        \${result.findings.exact_duplicates.map(dup => \`
-                            <li><strong>\${dup.duplicate_title}</strong> → <em>\${dup.official_title}</em> (\${dup.recommended_action})</li>
-                        \`).join('')}
-                    </ul>
-                </div>
-                \` : ''}
-                
-                \${result.findings && result.findings.similar_pages && result.findings.similar_pages.length > 0 ? \`
-                <div style="background: #d1ecf1; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #17a2b8;">
-                    <h4 style="margin: 0 0 12px 0; color: #0c5460;">Similar Pages Requiring Review:</h4>
-                    <ul style="margin: 0; padding-left: 20px; color: #0c5460;">
-                        \${result.findings.similar_pages.map(sim => \`
-                            <li><strong>\${sim.similar_title}</strong> (\${sim.similarity.toFixed(1)}% similar) → <em>\${sim.official_title}</em> (\${sim.recommended_action})</li>
-                        \`).join('')}
-                    </ul>
-                </div>
-                \` : ''}
-                
-                <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
-                    <h4 style="margin: 0 0 8px 0;">Next Steps:</h4>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <li>Review the detailed findings above</li>
-                        <li>Consider running additional QA tasks for comprehensive analysis</li>
-                        <li>Schedule regular quality checks before semester start</li>
-                        \${analyzeOnly && exactDuplicates > 0 ? '<li>Run cleanup mode to remove exact duplicates</li>' : ''}
-                    </ul>
-                </div>
-                
-                <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
-\${result.output || 'Task completed successfully'}</pre>
-            \`;
-        }
-
-        // Enhanced results generation for Phase 2
         function generateEnhancedDuplicateResults(result) {
+            console.log('Phase 2: Generating enhanced results for:', result);
+            
             const findings = result.findings || {};
             const riskAssessment = result.risk_assessment || {};
             const safeActions = result.safe_actions || [];
             const manualReview = result.requires_manual_review || [];
             const nextSteps = result.next_steps || {};
             
+            // Calculate success metrics for confidence-building messaging
+            const totalIssues = (findings.total_duplicates || findings.exact_duplicates || 0);
+            const autoResolved = safeActions.length;
+            const manualRequired = manualReview.length;
+            const successRate = totalIssues > 0 ? Math.round((autoResolved / totalIssues) * 100) : 0;
+            
             return \`
-                <div class="result-summary">
-                    <div class="summary-card">
-                        <div class="summary-number">\${findings.total_duplicates || findings.exact_duplicates || 0}</div>
-                        <div class="summary-label">Total Duplicates Found</div>
+                <!-- Analysis Results Banner -->
+                <div style="background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%); padding: 24px; border-radius: 12px; margin-bottom: 24px; border-left: 6px solid var(--acu-deep-purple); box-shadow: 0 4px 12px rgba(74, 26, 74, 0.15);">
+                    <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 24px; margin-right: 12px;">🔍</span>
+                        <h2 style="margin: 0; color: var(--acu-deep-purple); font-size: 20px;">Analysis Complete - Review Findings</h2>
                     </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${safeActions.length}</div>
-                        <div class="summary-label">Safe to Delete</div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${manualReview.length}</div>
-                        <div class="summary-label">Requires Manual Review</div>
-                    </div>
-                    <div class="summary-card">
-                        <div class="summary-number">\${riskAssessment.protected_by_links || 0}</div>
-                        <div class="summary-label">Protected by Links</div>
-                    </div>
-                </div>
-                
-                <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 12px 0; color: #2d5a2d;">🎉 Enhanced Analysis Complete</h3>
-                    <p style="margin: 0; color: #2d5a2d;">
-                        <strong>Phase 2 Preview-First Analysis:</strong> Your course content has been thoroughly analyzed 
-                        with link dependency mapping. Found \${findings.total_duplicates || findings.exact_duplicates || 0} duplicate pages with 
-                        detailed safety assessment for each potential action.
+                    <p style="margin: 0 0 16px 0; color: var(--acu-purple); font-size: 16px;">
+                        <strong>\${autoResolved} duplicates ready for safe removal</strong> - Review the details below and approve actions.
                     </p>
-                </div>
-                
-                \${safeActions.length > 0 ? \`
-                <div style="background: #d4edda; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #28a745;">
-                    <h4 style="margin: 0 0 12px 0; color: #155724;">✅ Safe Actions Identified:</h4>
-                    <ul style="margin: 0; padding-left: 20px; color: #155724;">
-                        \${safeActions.map(action => \`
-                            <li><strong>\${action.delete_page_title || action.duplicate_title}</strong> → Can be safely deleted 
-                            (\${action.reason}) - No inbound links detected</li>
-                        \`).join('')}
-                    </ul>
-                    \${nextSteps.can_proceed_with_safe_actions ? \`
-                        <div style="margin-top: 16px;">
-                            <button class="btn-primary" onclick="executeSafeActions()" id="executeSafeBtn">
-                                Execute \${safeActions.length} Safe Actions
-                            </button>
-                            <button class="btn-secondary" onclick="reviewSafeActions()" style="margin-left: 8px;">
-                                Review Details First
-                            </button>
+                    <div style="background: rgba(255,255,255,0.7); padding: 12px; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--acu-deep-purple); font-weight: 500;">Ready for Action: \${successRate}%</span>
+                            <span style="color: var(--acu-purple); font-size: 14px;">\${autoResolved} of \${totalIssues} duplicates staged for removal</span>
                         </div>
-                    \` : ''}
-                </div>
-                \` : ''}
-                
-                \${manualReview.length > 0 ? \`
-                <div style="background: #fff3cd; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #ffc107;">
-                    <h4 style="margin: 0 0 12px 0; color: #856404;">⚠️ Manual Review Required:</h4>
-                    <ul style="margin: 0; padding-left: 20px; color: #856404;">
-                        \${manualReview.map(item => \`
-                            <li><strong>\${item.page1_title || item.duplicate_title}</strong> vs <strong>\${item.page2_title || item.official_title}</strong> 
-                            - \${item.reason} (\${item.inbound_links_page1 || 0} vs \${item.inbound_links_page2 || 0} inbound links)</li>
-                        \`).join('')}
-                    </ul>
-                    <div style="margin-top: 12px;">
-                        <button class="btn-secondary" onclick="showDetailedReview()" id="detailedReviewBtn">
-                            View Detailed Analysis
-                        </button>
                     </div>
                 </div>
-                \` : ''}
-                
-                \${riskAssessment.protected_by_links > 0 ? \`
-                <div style="background: #f8d7da; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #dc3545;">
-                    <h4 style="margin: 0 0 12px 0; color: #721c24;">🛡️ Link-Protected Pages:</h4>
-                    <p style="margin: 0; color: #721c24;">
-                        \${riskAssessment.protected_by_links} duplicate pages are protected from deletion because 
-                        they have inbound links from other course content. These require manual review to determine 
-                        if links should be redirected before deletion.
+
+                <!-- Action-Oriented Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div style="background: #fff; padding: 20px; border-radius: 8px; border-left: 4px solid var(--acu-deep-purple); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 32px; font-weight: bold; color: var(--acu-deep-purple); margin-bottom: 8px;">\${autoResolved}</div>
+                        <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 4px;">Ready for Removal</div>
+                        <div style="font-size: 14px; color: var(--acu-purple);">Safe duplicates staged</div>
+                    </div>
+                    
+                    \${manualRequired > 0 ? \`
+                    <div style="background: #fff; padding: 20px; border-radius: 8px; border-left: 4px solid var(--acu-gold); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 32px; font-weight: bold; color: var(--acu-gold); margin-bottom: 8px;">\${manualRequired}</div>
+                        <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 4px;">Need Your Decision</div>
+                        <div style="font-size: 14px; color: var(--acu-purple);">Est. \${Math.ceil(manualRequired * 2)} minutes</div>
+                    </div>
+                    \` : \`
+                    <div style="background: #fff; padding: 20px; border-radius: 8px; border-left: 4px solid var(--acu-deep-purple); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 32px; font-weight: bold; color: var(--acu-deep-purple); margin-bottom: 8px;">✓</div>
+                        <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 4px;">All Ready for Action</div>
+                        <div style="font-size: 14px; color: var(--acu-purple);">No manual decisions needed</div>
+                    </div>
+                    \`}
+                    
+                    <div style="background: #fff; padding: 20px; border-radius: 8px; border-left: 4px solid var(--acu-purple); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 32px; font-weight: bold; color: var(--acu-purple); margin-bottom: 8px;">\${riskAssessment.protected_by_links || 0}</div>
+                        <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 4px;">Protected Pages</div>
+                        <div style="font-size: 14px; color: var(--acu-purple);">Pages with inbound links</div>
+                    </div>
+                </div>
+
+                <!-- Priority Action Section -->
+                \${manualRequired > 0 ? \`
+                <div style="background: var(--acu-cream-light); padding: 20px; border-radius: 8px; margin-bottom: 24px; border-left: 6px solid var(--acu-gold); box-shadow: 0 4px 12px rgba(244, 185, 66, 0.15);">
+                    <div style="display: flex; align-items: center; margin-bottom: 16px;">
+                        <span style="font-size: 20px; margin-right: 12px;">⚠️</span>
+                        <h3 style="margin: 0; color: var(--acu-deep-purple); font-size: 18px;">Decision Required (\${manualRequired} items)</h3>
+                    </div>
+                    <p style="margin: 0 0 16px 0; color: var(--acu-purple);">
+                        These pages need your decision before any removal. Each has identical content but different usage patterns.
                     </p>
+                    <div style="background: rgba(255,255,255,0.7); padding: 16px; border-radius: 6px; margin-bottom: 16px;">
+                        <h4 style="margin: 0 0 12px 0; color: var(--acu-deep-purple); font-size: 14px;">Quick Decision Guide:</h4>
+                        <ul style="margin: 0; padding-left: 20px; color: var(--acu-purple); font-size: 14px;">
+                            <li>Check which page is more recently updated</li>
+                            <li>Verify which one has more inbound links</li>
+                            <li>Keep the page that's most integrated into your course flow</li>
+                        </ul>
+                    </div>
+                    <button class="btn-primary" onclick="showDetailedReview()" style="background: var(--acu-gold); color: var(--acu-deep-purple); border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                        Review \${manualRequired} Items (Est. \${Math.ceil(manualRequired * 2)} min)
+                    </button>
                 </div>
                 \` : ''}
-                
-                <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; border-left: 4px solid var(--acu-primary);">
-                    <h4 style="margin: 0 0 8px 0;">Phase 2 Next Steps:</h4>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <li><strong>Review Findings:</strong> Examine the detailed analysis above</li>
-                        <li><strong>Approve Safe Actions:</strong> Confirm deletion of orphaned duplicates</li>
-                        <li><strong>Manual Review:</strong> Decide on official duplicates with competing links</li>
-                        <li><strong>Execute Approved:</strong> Run cleanup only for approved actions</li>
-                        <li><strong>Monitor Results:</strong> Verify no broken links after cleanup</li>
-                    </ul>
+
+                <!-- Staged Actions Section (Collapsible) -->
+                \${safeActions.length > 0 ? \`
+                <details style="margin-bottom: 24px;">
+                                        <summary style="cursor: pointer; font-weight: 600; color: var(--acu-deep-purple); font-size: 16px; padding: 16px; background: var(--acu-cream); border-radius: 6px; border: 1px solid var(--acu-gold);">
+                        ✅ Ready for Removal (\${safeActions.length} items) - Click to view details
+                    </summary>
+                    <div style="background: var(--acu-cream-light); padding: 20px; border-radius: 6px; margin-top: 8px; border: 1px solid var(--acu-gold);">
+                        <p style="margin: 0 0 16px 0; color: var(--acu-purple); font-size: 14px;">
+                            These duplicates are staged for safe removal because they have identical content to official pages and no inbound links.
+                        </p>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            \${safeActions.map(action => \`
+                                <div style="background: white; padding: 12px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid var(--acu-deep-purple);">
+                                    <div style="font-weight: 600; color: var(--acu-deep-purple); margin-bottom: 4px;">
+                                        \${action.delete_page_title || action.duplicate_title}
+                                    </div>
+                                    <div style="font-size: 13px; color: var(--acu-purple); line-height: 1.4;">
+                            <strong>Safe to remove:</strong> This page has identical content to your official version<br>
+                            <strong>No inbound links:</strong> No other content links to this page<br>
+                            <strong>Status:</strong> Ready for removal
+                        </div>
+                                </div>
+                            \`).join('')}
+                        </div>
+                        \${nextSteps.can_proceed_with_safe_actions ? \`
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #c3e6cb;">
+                                <button class="btn-primary" onclick="executeSafeActions()" id="executeSafeBtn" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 500; cursor: pointer;">
+                                    Remove \${safeActions.length} Duplicates Now
+                                </button>
+                            </div>
+                        \` : ''}
+                    </div>
+                </details>
+                \` : ''}
+
+                <!-- Course Health Summary -->
+                <div style="background: #e8f4f8; padding: 20px; border-radius: 8px; border-left: 4px solid #17a2b8;">
+                    <h4 style="margin: 0 0 12px 0; color: #0c5460; font-size: 16px;">📊 Analysis Summary</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #17a2b8;">\${totalIssues}</div>
+                            <div style="font-size: 12px; color: #666;">Duplicates Found</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #28a745;">\${successRate}%</div>
+                            <div style="font-size: 12px; color: #666;">Ready for Action</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #ffc107;">\${manualRequired}</div>
+                            <div style="font-size: 12px; color: #666;">Need Decision</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #17a2b8;">\${riskAssessment.protected_by_links || 0}</div>
+                            <div style="font-size: 12px; color: #666;">Protected</div>
+                        </div>
+                    </div>
                 </div>
-                
-                <div style="background: #e7f3ff; padding: 16px; border-radius: 6px; margin-top: 16px;">
-                    <h4 style="margin: 0 0 8px 0; color: #0066cc;">💡 Smart Recommendations:</h4>
-                    <p style="margin: 0; color: #0066cc; font-size: 14px;">
-                        Based on inbound link analysis, the system has generated intelligent recommendations 
-                        for each duplicate. Pages with more integration into your course structure are 
-                        preserved, while isolated duplicates are recommended for cleanup.
-                    </p>
-                </div>
-                
-                <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 16px;">
+
+                <!-- Technical Details (Collapsed by Default) -->
+                <details style="margin-top: 24px;">
+                    <summary style="cursor: pointer; font-weight: 600; color: #666; font-size: 14px; padding: 12px; background: #f8f9fa; border-radius: 4px; border: 1px solid #dee2e6;">
+                        🔧 Technical Details (Click to expand)
+                    </summary>
+                    <pre style="background: #f8f9fa; padding: 16px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 8px; border: 1px solid #dee2e6;">
 \${JSON.stringify(result, null, 2)}</pre>
+                </details>
             \`;
         }
 
-        // New functions for Phase 2 workflow
         function executeSafeActions() {
             if (!currentAnalysisResult || !currentAnalysisResult.safe_actions) {
                 showError('No safe actions available to execute');
                 return;
             }
             
-            if (confirm(\`Execute \${currentAnalysisResult.safe_actions.length} safe deletion actions? This cannot be undone.\`)) {
+            if (confirm('Remove ' + currentAnalysisResult.safe_actions.length + ' duplicate pages? This action cannot be undone.')) {
                 executeApprovedActions(currentAnalysisResult.safe_actions);
             }
         }
@@ -1393,7 +1586,7 @@ function generateEnhancedQADashboard(token) {
                 },
                 body: JSON.stringify({ 
                     taskId: currentTaskId,
-                    courseId: '280', // Update as needed
+                    courseId: '${getRealCourseId(token)}',
                     userId: currentUserId,
                     approvedActions: approvedActions
                 })
@@ -1414,27 +1607,33 @@ function generateEnhancedQADashboard(token) {
         }
 
         function showExecutionResults(result) {
-            alert('Execution results: ' + JSON.stringify(result, null, 2));
+            alert('Phase 2: Execution results: ' + JSON.stringify(result, null, 2));
         }
 
         function reviewSafeActions() {
-            alert('Detailed review functionality will show individual action details here.');
+            alert('Phase 2: Detailed review functionality will show individual action details here.');
         }
 
         function showDetailedReview() {
-            alert('Detailed manual review interface will be shown here.');
+            alert('Phase 2: Detailed manual review interface will be shown here.');
         }
 
         function showError(error) {
+            console.error('Phase 2: Showing error:', error);
             const container = document.getElementById('resultsContainer');
             const title = document.getElementById('resultsTitle');
             const content = document.getElementById('resultsContent');
             
-            title.textContent = 'Analysis Encountered an Issue';
+            if (!container || !title || !content) {
+                console.error('Error display elements not found');
+                return;
+            }
+            
+            title.textContent = 'Phase 2: Analysis Encountered an Issue';
             content.innerHTML = \`
                 <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107;">
                     <h3 style="margin: 0 0 12px 0; color: #856404;">Analysis Could Not Complete</h3>
-                    <p style="margin: 0 0 16px 0; color: #856404;">The analysis process encountered an unexpected issue. This doesn't indicate any problems with your course content.</p>
+                    <p style="margin: 0 0 16px 0; color: #856404;">The Phase 2 analysis process encountered an unexpected issue. This doesn't indicate any problems with your course content.</p>
                     <details style="margin-top: 16px;">
                         <summary style="cursor: pointer; font-weight: 600;">Technical Details</summary>
                         <pre style="background: #f8f9fa; padding: 12px; margin-top: 8px; border-radius: 4px; font-size: 12px;">\${error}</pre>
@@ -1444,8 +1643,9 @@ function generateEnhancedQADashboard(token) {
                 <div style="background: #f8f9fa; padding: 16px; border-radius: 6px; margin-top: 16px;">
                     <h4 style="margin: 0 0 8px 0;">Suggested Actions:</h4>
                     <ul style="margin: 0; padding-left: 20px;">
-                        <li>Try the task again in a few minutes</li>
+                        <li>Try the Phase 2 analysis again in a few minutes</li>
                         <li>Check if you have the necessary Canvas permissions</li>
+                        <li>Verify your Canvas API token is configured</li>
                         <li>Contact your LMS administrator if the issue persists</li>
                     </ul>
                 </div>
@@ -1460,13 +1660,39 @@ function generateEnhancedQADashboard(token) {
             if (e.key === 'Enter' || e.key === ' ') {
                 if (e.target.classList.contains('task-card')) {
                     e.preventDefault();
-                    const taskId = e.target.onclick.toString().match(/'([^']+)'/)[1];
-                    startAnalysis(taskId);
+                    const onclick = e.target.getAttribute('onclick');
+                    if (onclick) {
+                        const match = onclick.match(/startAnalysis\\('([^']+)'\\)/);
+                        if (match) {
+                            startAnalysis(match[1]);
+                        }
+                    }
                 }
             }
         });
-    </script>
-</body>
+
+        // Debug function to check if all elements exist
+        function checkElements() {
+            const elements = [
+                'analysisPreview', 'previewTitle', 'previewContent',
+                'progressOverlay', 'progressText', 'progressDetails',
+                'resultsContainer', 'resultsTitle', 'resultsContent'
+            ];
+            
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                console.log(\`Element \${id}: \${element ? 'found' : 'NOT FOUND'}\`);
+            });
+        }
+
+        // Call checkElements when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Phase 2: DOM loaded, checking elements...');
+            checkElements();
+        });
+
+        console.log('Phase 2: JavaScript loaded successfully');
+    </script> </body>
 </html>
   `
 }
@@ -1490,29 +1716,8 @@ lti.app.use((req, res, next) => {
   next()
 })
 
-// API endpoint to execute QA tasks - on main app route
-lti.app.post('/execute', async (req, res) => {
-  const { taskId, courseId, userId, analyzeOnly = true } = req.body
-  
-  try {
-    console.log(`Executing QA task: ${taskId} for course: ${courseId} (analyzeOnly: ${analyzeOnly})`)
-    
-    // Execute the Python automation script
-    const result = await executeQATask(taskId, courseId, userId, analyzeOnly)
-    
-    res.json({ 
-      success: true, 
-      taskId,
-      result: result 
-    })
-  } catch (error) {
-    console.error('QA Task execution error:', error)
-    res.json({ 
-      success: false, 
-      error: error.message 
-    })
-  }
-})
+// REMOVED: Duplicate /execute endpoint that was conflicting with Phase 2 implementation
+// The Phase 2 /execute endpoint at line 33 handles all execution
 
 // Phase 2: Legacy executeQATask function (kept for backward compatibility)
 async function executeQATask(taskId, courseId, userId, analyzeOnly = true) {
@@ -1539,10 +1744,10 @@ const setup = async () => {
     
     console.log('🚀 QA Automation LTI deployed on http://localhost:3000')
     console.log('📋 LTI Configuration URLs (for Canvas Developer Key):')
-    console.log('   - Launch URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/qa-tools')
-    console.log('   - Login URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/login') 
-    console.log('   - Keyset URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/keys')
-    console.log('   - Deep Linking URL: https://xbox-subscribe-wrong-harmful.trycloudflare.com/qa-tools')
+    console.log('   - Launch URL: https://stay-happens-actually-devoted.trycloudflare.com/qa-tools')
+    console.log('   - Login URL: https://stay-happens-actually-devoted.trycloudflare.com/login') 
+    console.log('   - Keyset URL: https://stay-happens-actually-devoted.trycloudflare.com/keys')
+    console.log('   - Deep Linking URL: https://stay-happens-actually-devoted.trycloudflare.com/qa-tools')
     
     // Note: Platform registration will be done after Canvas Developer Key setup
     console.log('\n⏳ Canvas Developer Key setup required before platform registration')

@@ -197,11 +197,82 @@ class CanvasDuplicateCleaner:
                     for j in range(i+1, len(pages)):
                         pair = tuple(sorted([pages[i]['url'], pages[j]['url']]))
                         if pair not in seen_official:
-                            official_duplicates.append({
-                                'official_page_1': pages[i],
-                                'official_page_2': pages[j],
-                                'similarity': 1.0
-                            })
+                            # Apply intelligent deletion logic for official duplicates
+                            page1 = pages[i]
+                            page2 = pages[j]
+                            
+                            # Check which page has more inbound links (placeholder for now)
+                            page1_links = 0  # TODO: Implement inbound link detection
+                            page2_links = 0  # TODO: Implement inbound link detection
+                            
+                            # If one has more links, keep that one
+                            if page1_links > page2_links:
+                                official_duplicates.append({
+                                    'delete_page': page2,
+                                    'keep_page': page1,
+                                    'reason': f'Both pages in modules - {page1["title"]} has more inbound links',
+                                    'similarity': 1.0,
+                                    'auto_delete': True
+                                })
+                            elif page2_links > page1_links:
+                                official_duplicates.append({
+                                    'delete_page': page1,
+                                    'keep_page': page2,
+                                    'reason': f'Both pages in modules - {page2["title"]} has more inbound links',
+                                    'similarity': 1.0,
+                                    'auto_delete': True
+                                })
+                            else:
+                                # Same number of links, check published status
+                                page1_published = page1.get('published', False)
+                                page2_published = page2.get('published', False)
+                                
+                                if page1_published and not page2_published:
+                                    official_duplicates.append({
+                                        'delete_page': page2,
+                                        'keep_page': page1,
+                                        'reason': f'Both pages in modules - {page1["title"]} is published, {page2["title"]} is not',
+                                        'similarity': 1.0,
+                                        'auto_delete': True
+                                    })
+                                elif page2_published and not page1_published:
+                                    official_duplicates.append({
+                                        'delete_page': page1,
+                                        'keep_page': page2,
+                                        'reason': f'Both pages in modules - {page2["title"]} is published, {page1["title"]} is not',
+                                        'similarity': 1.0,
+                                        'auto_delete': True
+                                    })
+                                else:
+                                    # Both published or both unpublished, check creation/update date
+                                    page1_time = page1.get('updated_at', page1.get('created_at', ''))
+                                    page2_time = page2.get('updated_at', page2.get('created_at', ''))
+                                    
+                                    if page1_time > page2_time:
+                                        official_duplicates.append({
+                                            'delete_page': page2,
+                                            'keep_page': page1,
+                                            'reason': f'Both pages in modules - {page1["title"]} is more recent',
+                                            'similarity': 1.0,
+                                            'auto_delete': True
+                                        })
+                                    elif page2_time > page1_time:
+                                        official_duplicates.append({
+                                            'delete_page': page1,
+                                            'keep_page': page2,
+                                            'reason': f'Both pages in modules - {page2["title"]} is more recent',
+                                            'similarity': 1.0,
+                                            'auto_delete': True
+                                        })
+                                    else:
+                                        # Same time, manual review needed
+                                        official_duplicates.append({
+                                            'official_page_1': page1,
+                                            'official_page_2': page2,
+                                            'similarity': 1.0,
+                                            'reason': 'Both pages in modules - same creation time - manual decision required',
+                                            'auto_delete': False
+                                        })
                             seen_official.add(pair)
         # Track orphaned pages by content hash
         orphan_hashes = {}
@@ -361,6 +432,26 @@ class CanvasDuplicateCleaner:
                 results = list(executor.map(delete_orphan_dup, orphaned_duplicates))
             orphaned_deleted = [r for r in results if r]
             deleted_count += len(orphaned_deleted)
+        
+        # Auto-delete official duplicates that meet criteria
+        official_deleted = []
+        if auto_delete and official_duplicates:
+            auto_delete_official = [dup for dup in official_duplicates if dup.get('auto_delete', False)]
+            if auto_delete_official:
+                self.logger.info(f"Auto-deleting {len(auto_delete_official)} official duplicates (parallel, max 5 threads)...")
+                def delete_official_dup(dup):
+                    page_url = dup['delete_page']['url']
+                    if self.delete_page(course_id, page_url):
+                        self.logger.info(f"Deleted official duplicate: {dup['delete_page']['title']} - {dup['reason']}")
+                        return dup
+                    else:
+                        failed_deletions.append(dup['delete_page'])
+                        self.logger.error(f"Could not delete official duplicate: {dup['delete_page']['title']} (URL: {page_url})")
+                        return None
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                    results = list(executor.map(delete_official_dup, auto_delete_official))
+                official_deleted = [r for r in results if r]
+                deleted_count += len(official_deleted)
         
         return {
             'course_id': course_id,
@@ -695,7 +786,7 @@ def main():
             
             # Simulate inbound link checking (placeholder for now)
             risk_assessment = {
-                "protected_by_links": len(cleaner.exact_duplicates) // Placeholder
+                "protected_by_links": len(cleaner.exact_duplicates)  # Placeholder
             }
             
             # Categorize findings for Phase 2
@@ -708,23 +799,47 @@ def main():
                     safe_actions.append({
                         "delete_page_title": dup['duplicate_page']['title'],
                         "delete_page_url": dup['duplicate_page']['url'],
+                        "delete_page_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['duplicate_page']['url']}",
                         "keep_page_title": dup['official_page']['title'],
                         "keep_page_url": dup['official_page']['url'],
-                        "reason": "Orphaned duplicate - no inbound links detected",
+                        "keep_page_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['official_page']['url']}",
+                        "similarity_percentage": "100.0%",
+                        "reason": "Orphaned duplicate - 100% identical to official page - no inbound links detected",
                         "risk_level": "LOW"
                     })
             
             # Manual review: official duplicates
             for dup in getattr(cleaner, 'official_duplicates', []):
-                requires_manual_review.append({
-                    "page1_title": dup['official_page_1']['title'],
-                    "page1_url": dup['official_page_1']['url'],
-                    "page2_title": dup['official_page_2']['title'],
-                    "page2_url": dup['official_page_2']['url'],
-                    "reason": "Both pages in modules - manual decision required",
-                    "inbound_links_page1": 0,  # Placeholder
-                    "inbound_links_page2": 0   # Placeholder
-                })
+                similarity_percentage = dup.get('similarity', 1.0) * 100
+                
+                # Check if this is an auto-delete case or manual review case
+                if dup.get('auto_delete', False):
+                    # This is an auto-delete case - add to safe actions
+                    safe_actions.append({
+                        "delete_page_title": dup['delete_page']['title'],
+                        "delete_page_url": dup['delete_page']['url'],
+                        "delete_page_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['delete_page']['url']}",
+                        "keep_page_title": dup['keep_page']['title'],
+                        "keep_page_url": dup['keep_page']['url'],
+                        "keep_page_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['keep_page']['url']}",
+                        "similarity_percentage": f"{similarity_percentage:.1f}%",
+                        "reason": dup['reason'],
+                        "risk_level": "LOW"
+                    })
+                else:
+                    # This is a manual review case
+                    requires_manual_review.append({
+                        "page1_title": dup['official_page_1']['title'],
+                        "page1_url": dup['official_page_1']['url'],
+                        "page1_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['official_page_1']['url']}",
+                        "page2_title": dup['official_page_2']['title'],
+                        "page2_url": dup['official_page_2']['url'],
+                        "page2_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['official_page_2']['url']}",
+                        "similarity_percentage": f"{similarity_percentage:.1f}%",
+                        "reason": dup.get('reason', f"Both pages in modules - {similarity_percentage:.1f}% similar - manual decision required"),
+                        "inbound_links_page1": 0,  # Placeholder
+                        "inbound_links_page2": 0   # Placeholder
+                    })
             
             enhanced_output = {
                 "phase": 2,
@@ -738,6 +853,8 @@ def main():
                 "analyze_only": True,
                 "inbound_links_checked": args.check_inbound_links,
                 "risk_assessment": risk_assessment,
+                "canvas_base_url": f"https://{args.canvas_url}",
+                "course_id": args.course_id,
                 "findings": {
                     "safe_actions": safe_actions,
                     "requires_manual_review": requires_manual_review,
@@ -745,9 +862,12 @@ def main():
                         {
                             "duplicate_title": dup['duplicate_page']['title'],
                             "duplicate_url": dup['duplicate_page']['url'],
+                            "duplicate_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['duplicate_page']['url']}",
                             "official_title": dup['official_page']['title'],
                             "official_url": dup['official_page']['url'],
+                            "official_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{dup['official_page']['url']}",
                             "similarity": 1.0,
+                            "similarity_percentage": "100.0%",
                             "recommended_action": "DELETE",
                             "impact": "Safe to remove - exact copy exists"
                         } for dup in cleaner.exact_duplicates
@@ -755,10 +875,13 @@ def main():
                     "similar_pages": [
                         {
                             "similar_title": sim['similar_page']['title'],
-                            "similar_url": sim['similar_page']['url'], 
+                            "similar_url": sim['similar_page']['url'],
+                            "similar_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{sim['similar_page']['url']}",
                             "official_title": sim['official_page']['title'],
                             "official_url": sim['official_page']['url'],
+                            "official_canvas_link": f"https://{args.canvas_url}/courses/{args.course_id}/pages/{sim['official_page']['url']}",
                             "similarity": sim['similarity'],
+                            "similarity_percentage": f"{sim['similarity']:.1%}",
                             "recommended_action": "REVIEW",
                             "impact": f"{sim['similarity']:.1%} similar - manual review recommended"
                         } for sim in cleaner.similar_pages
