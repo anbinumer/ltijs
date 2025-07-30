@@ -137,11 +137,7 @@ class CanvasDuplicateCleaner:
         self.logger.info(f"Fetching full details for {len(basic_pages)} pages...")
         def fetch_full_page(page):
             try:
-                # Use session directly for single page request (not paginated)
-                url = f"{self.api_url}/courses/{self.course_id}/pages/{page['url']}"
-                response = self.session.get(url)
-                response.raise_for_status()
-                full_page = response.json()
+                full_page = self._make_paginated_request(f"courses/{self.course_id}/pages/{page['url']}")
                 return full_page
             except Exception as e:
                 self.logger.warning(f"Could not get details for page {page['url']}: {e}")

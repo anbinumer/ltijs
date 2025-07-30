@@ -287,9 +287,8 @@ function generateEnhancedQADashboard(token) {
     <style>
         :root {
             --acu-deep-purple: #4A1A4A; --acu-purple: #6B2C6B; --acu-red: #D2492A;
-            --acu-red-dark: #B8391F; --acu-gold: #F4B942; --acu-gold-dark: #E6A830;
-            --acu-cream: #F9F4F1; --acu-cream-dark: #F4ECE6;
-            --acu-success: #F4B942; --canvas-border: #c7cdd1; --neutral-grey: #6c757d;
+            --acu-red-dark: #B83F1F; --acu-gold: #F4B942; --acu-cream: #F9F4F1;
+            --canvas-success: #00ac18; --canvas-border: #c7cdd1; --neutral-grey: #6c757d;
         }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background: var(--acu-cream); color: var(--acu-purple); }
         .header { background: #fff; padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-left: 4px solid var(--acu-deep-purple); }
@@ -309,9 +308,9 @@ function generateEnhancedQADashboard(token) {
         .preview-header { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--canvas-border); display: flex; justify-content: space-between; align-items: center; }
         .preview-content { overflow-y: auto; }
         .preview-actions { padding-top: 24px; text-align: right; border-top: 1px solid var(--canvas-border); margin-top: 24px; }
-                 .btn-primary, .btn-secondary { padding: 12px 24px; border-radius: 6px; border: none; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
-         .btn-primary { background: var(--acu-red); color: white; } .btn-primary:hover { background: var(--acu-red-dark); }
-         .btn-secondary { background: var(--acu-gold); color: var(--acu-deep-purple); } .btn-secondary:hover { background: var(--acu-gold-dark); }
+        .btn-primary, .btn-secondary { padding: 12px 24px; border-radius: 6px; border: none; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
+        .btn-primary { background: var(--acu-red); color: white; } .btn-primary:hover { background: var(--acu-red-dark); }
+        .btn-secondary { background: #eee; color: #333; } .btn-secondary:hover { background: #ddd; }
         .results-container { margin-top: 24px; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: none; }
         .results-header { background: linear-gradient(135deg, var(--acu-deep-purple) 0%, var(--acu-purple) 100%); color: white; padding: 20px 24px; font-weight: 600; }
         .results-content { padding: 24px; }
@@ -321,38 +320,14 @@ function generateEnhancedQADashboard(token) {
         .action-item input[type=checkbox] { margin-right: 12px; transform: scale(1.2); }
         .action-item label { flex-grow: 1; }
         /* NEW: Severity styles for consistent UI */
-                 .result-section.severity-high { border-color: var(--acu-red); }
-         .result-section.severity-medium { border-color: var(--acu-gold); }
-         .result-section.severity-low { border-color: var(--neutral-grey); }
-         .result-section.severity-safe { border-color: var(--acu-success); }
+        .result-section.severity-high { border-color: var(--acu-red); }
+        .result-section.severity-medium { border-color: var(--acu-gold); }
+        .result-section.severity-low { border-color: var(--neutral-grey); }
+        .result-section.severity-safe { border-color: var(--canvas-success); }
         .severity-badge { font-size: 0.75em; padding: 2px 8px; border-radius: 10px; color: white; margin-left: 10px; text-transform: uppercase; }
         .severity-badge.high { background-color: var(--acu-red); }
         .severity-badge.medium { background-color: var(--acu-gold); }
         .severity-badge.low { background-color: var(--neutral-grey); }
-        /* NEW: Execution results specific styles */
-        .execution-summary { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 16px; border-radius: 8px; border: 1px solid var(--canvas-border); background: #f9f9f9; }
-        .execution-stats { display: flex; align-items: center; }
-        .stat-card { padding: 12px 20px; border-radius: 6px; color: white; font-weight: bold; }
-                 .stat-card.success { background: var(--acu-success); color: var(--acu-deep-purple); }
-         .stat-card.mixed { background: linear-gradient(to right, var(--acu-red), var(--acu-gold)); }
-         .failure-note { font-size: 0.9em; color: var(--acu-red); margin-top: 4px; }
-         .timestamp { font-size: 0.8em; color: var(--acu-purple); margin-top: 4px; }
-         .execution-details { margin-top: 12px; }
-         .execution-item { display: flex; align-items: center; margin-bottom: 8px; }
-         .execution-item .execution-icon { font-size: 1.2em; margin-right: 10px; }
-         .execution-item.success .execution-icon { color: var(--acu-success); }
-         .execution-item.failure .execution-icon { color: var(--acu-red); }
-         .execution-item .execution-content { flex-grow: 1; }
-         .execution-item .fix-detail { font-size: 0.8em; color: var(--acu-purple); }
-         .execution-item .original-issue { font-size: 0.8em; color: var(--neutral-grey); }
-                 .execution-actions { margin-top: 24px; text-align: right; }
-         .action-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-bottom: 16px; }
-                 .next-steps { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--canvas-border); }
-         .next-steps h4 { margin-top: 0; margin-bottom: 12px; }
-         .next-steps ul { list-style: none; padding: 0; margin: 0; }
-         .next-steps li { margin-bottom: 8px; }
-         .success-message { margin-top: 24px; padding: 16px; border-radius: 8px; background: var(--acu-cream-dark); border: 1px solid var(--acu-gold); color: var(--acu-deep-purple); }
-         .success-message h4 { margin-top: 0; margin-bottom: 8px; color: var(--acu-purple); }
     </style>
             <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
         <script>
@@ -500,8 +475,6 @@ function generateEnhancedQADashboard(token) {
                                 <input type="checkbox" class="manualReviewChecks" data-action-index="\${index}" id="manual_\${index}">
                                 <label for="manual_\${index}">
                                     <strong>Delete:</strong> "\${item.delete_page_title}"<br>
-                                    <strong>Keep:</strong> "\${item.keep_page_title || 'Unknown'}"<br>
-                                    \${item.similarity_percentage ? \`<small><strong>Similarity:</strong> \${item.similarity_percentage}</small><br>\` : ''}
                                     <small>\${item.reason}</small>
                                 </label>
                             </div>
@@ -521,8 +494,6 @@ function generateEnhancedQADashboard(token) {
                                 <input type="checkbox" class="safeActionChecks" data-action-index="\${index}" id="safe_\${index}" checked>
                                 <label for="safe_\${index}">
                                     <strong>Delete:</strong> "\${action.delete_page_title}"<br>
-                                    <strong>Keep:</strong> "\${action.keep_page_title || 'Unknown'}"<br>
-                                    \${action.similarity_percentage ? \`<small><strong>Similarity:</strong> \${action.similarity_percentage}</small><br>\` : ''}
                                     <small>\${action.reason}</small>
                                 </label>
                             </div>
@@ -684,7 +655,8 @@ function generateEnhancedQADashboard(token) {
                 .then(data => {
                     hideProgress();
                     if (data.success) {
-                        showExecutionResults(data.result, allActions.length);
+                        alert('Actions executed successfully!');
+                        window.location.reload();
                     } else {
                         showError(data.error || 'Execution failed');
                     }
@@ -694,285 +666,31 @@ function generateEnhancedQADashboard(token) {
                     showError('Network error: ' + error.message);
                 });
             }
-
-            // NEW: Show detailed execution results with confirmation and download options
-            function showExecutionResults(executionResult, totalRequested) {
-                const container = document.getElementById('resultsContainer');
-                document.getElementById('resultsTitle').textContent = 'Execution Complete - ' + QA_TASKS[currentTaskId].name;
-                
-                const { summary = {}, results = {} } = executionResult;
-                const successful = summary.successful || 0;
-                const failed = summary.failed || 0;
-                const successfulFixes = results.successful_fixes || [];
-                const failedFixes = results.failed_fixes || [];
-                
-                let html = '<div class="execution-summary">' +
-                    '<div class="execution-stats">' +
-                    '<div class="stat-card ' + (failed === 0 ? 'success' : 'mixed') + '">' +
-                    '<h3>' + successful + ' of ' + totalRequested + ' Actions Completed Successfully</h3>' +
-                    (failed > 0 ? '<p class="failure-note">' + failed + ' actions failed - see details below</p>' : '') +
-                    '<p class="timestamp">Completed: ' + new Date().toLocaleString() + '</p>' +
-                    '</div></div></div>';
-
-                if (successfulFixes.length > 0) {
-                    html += '<div class="result-section severity-safe">' +
-                        '<h4>✅ Successfully Applied Changes (' + successful + ')</h4>' +
-                        '<p>These changes have been applied to your course and are now active.</p>' +
-                        '<div class="execution-details">';
-                    
-                    successfulFixes.forEach(fix => {
-                        html += '<div class="execution-item success">' +
-                            '<div class="execution-icon">✅</div>' +
-                            '<div class="execution-content">' +
-                            '<strong>' + (fix.assignment_name || 'Unknown') + '</strong><br>' +
-                            '<small>' + (fix.reason || 'No details') + '</small>';
-                        if (fix.fix_action) {
-                            html += '<br><span class="fix-detail">Applied: ' + getFixActionDescription(fix.fix_action) + '</span>';
-                        }
-                        html += '</div></div>';
-                    });
-                    
-                    html += '</div></div>';
-                }
-
-                if (failedFixes.length > 0) {
-                    html += '<div class="result-section severity-high">' +
-                        '<h4>❌ Failed Changes (' + failed + ')</h4>' +
-                        '<p>These changes could not be applied automatically. Manual review may be required.</p>' +
-                        '<div class="execution-details">';
-                    
-                    failedFixes.forEach(fix => {
-                        html += '<div class="execution-item failure">' +
-                            '<div class="execution-icon">❌</div>' +
-                            '<div class="execution-content">' +
-                            '<strong>' + (fix.assignment_name || 'Unknown Assignment') + '</strong><br>' +
-                            '<small>Reason: ' + (fix.failure_reason || 'Unknown error') + '</small>';
-                        if (fix.reason) {
-                            html += '<br><span class="original-issue">Original Issue: ' + fix.reason + '</span>';
-                        }
-                        html += '</div></div>';
-                    });
-                    
-                    html += '</div></div>';
-                }
-
-                html += '<div class="execution-actions">' +
-                    '<div class="action-buttons">' +
-                    '<button class="btn-secondary" onclick="QAApp.downloadExecutionReport()">📄 Download Execution Report</button>' +
-                    '<button class="btn-secondary" onclick="QAApp.runNewAnalysis()">🔄 Run New Analysis</button>' +
-                    '<button class="btn-primary" onclick="QAApp.returnToTasks()">Return to QA Tasks</button>' +
-                    '</div>';
-                
-                if (failed > 0) {
-                    html += '<div class="next-steps">' +
-                        '<h4>📋 Recommended Next Steps:</h4>' +
-                        '<ul>' +
-                        '<li>Review the failed changes above</li>' +
-                        '<li>Check Canvas permissions for API access</li>' +
-                        '<li>Consider applying failed changes manually in Canvas</li>' +
-                        '<li>Download the execution report for your records</li>' +
-                        '</ul></div>';
-                } else {
-                    html += '<div class="success-message">' +
-                        '<h4>🎉 All Changes Applied Successfully!</h4>' +
-                        '<p>Your course has been updated according to QA standards. Students will see these improvements immediately.</p>' +
-                        '</div>';
-                }
-                
-                html += '</div>';
-                
-                document.getElementById('resultsContent').innerHTML = html;
-                container.style.display = 'block';
-                container.scrollIntoView({ behavior: 'smooth' });
-                
-                // Store execution results for download
-                window.currentExecutionResult = executionResult;
-            }
-
-            // NEW: Helper function to describe fix actions in human terms
-            function getFixActionDescription(fixAction) {
-                const actionType = fixAction.type;
-                switch (actionType) {
-                    case 'update_points':
-                        return 'Set points to ' + fixAction.value;
-                    case 'update_grading_type':
-                        return 'Changed grading type to ' + fixAction.value;
-                    case 'update_attempts':
-                        return 'Set attempts to ' + (fixAction.value === -1 ? 'unlimited' : fixAction.value);
-                    case 'add_print_button':
-                        return 'Added standard print button to description';
-                    default:
-                        return 'Applied ' + actionType;
-                }
-            }
-
-            // NEW: Download execution report
-            function downloadExecutionReport() {
-                if (!window.currentExecutionResult) {
-                    alert('No execution results available for download');
-                    return;
-                }
-
-                try {
-                    const result = window.currentExecutionResult;
-                    const workbook = XLSX.utils.book_new();
-                    
-                    // Sheet 1: Execution Summary
-                    const summaryData = [
-                        { 'Field': 'Task Type', 'Value': QA_TASKS[currentTaskId].name },
-                        { 'Field': 'Course ID', 'Value': courseId },
-                        { 'Field': 'Executed By', 'Value': userName },
-                        { 'Field': 'Date', 'Value': new Date().toLocaleDateString() },
-                        { 'Field': 'Time', 'Value': new Date().toLocaleTimeString() },
-                        { 'Field': 'Total Actions', 'Value': (result.summary?.successful || 0) + (result.summary?.failed || 0) },
-                        { 'Field': 'Successful', 'Value': result.summary?.successful || 0 },
-                        { 'Field': 'Failed', 'Value': result.summary?.failed || 0 },
-                        { 'Field': 'Success Rate', 'Value': calculateEnhancedSuccessRate(result) + '%' }
-                    ];
-                    
-                    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-                    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-                    
-                    // Sheet 2: All Changes (for analysis)
-                    const allChanges = [
-                        ...(result.results?.successful_fixes || []).map(fix => ({
-                            'Status': 'SUCCESS',
-                            'Item Name': fix.assignment_name || 'Unknown',
-                            'Canvas Link': generateEnhancedCanvasLink(fix),
-                            'Issue': fix.reason || 'QA Issue',
-                            'Action Applied': getFixActionDescription(fix.fix_action),
-                            'Item ID': fix.assignment_id || 'N/A',
-                            'Timestamp': new Date().toISOString()
-                        })),
-                        ...(result.results?.failed_fixes || []).map(fix => ({
-                            'Status': 'FAILED',
-                            'Item Name': fix.assignment_name || 'Unknown',
-                            'Canvas Link': generateEnhancedCanvasLink(fix),
-                            'Issue': fix.reason || 'QA Issue',
-                            'Failure Reason': fix.failure_reason || 'Unknown error',
-                            'Item ID': fix.assignment_id || 'N/A',
-                            'Timestamp': new Date().toISOString()
-                        }))
-                    ];
-                    
-                    if (allChanges.length > 0) {
-                        const changesSheet = XLSX.utils.json_to_sheet(allChanges);
-                        XLSX.utils.book_append_sheet(workbook, changesSheet, 'All Changes');
-                    }
-                    
-                    const timestamp = new Date().toISOString().slice(0,19).replace(/[:\-]/g, '');
-                    const filename = \`QA_Execution_\${currentTaskId}_\${courseId}_\${timestamp}.xlsx\`;
-                    XLSX.writeFile(workbook, filename);
-                    
-                } catch (error) {
-                    console.warn('Enhanced execution report failed:', error);
-                    // Fallback to basic report
-                    const result = window.currentExecutionResult;
-                    const { summary = {}, results = {} } = result;
-                    const successfulFixes = results.successful_fixes || [];
-                    const failedFixes = results.failed_fixes || [];
-
-                    const reportData = [
-                        { 'Report Type': 'QA Execution Results' },
-                        { 'Task': QA_TASKS[currentTaskId].name },
-                        { 'Course ID': courseId },
-                        { 'User': userName },
-                        { 'Execution Date': new Date().toISOString() }
-                    ];
-
-                    const workbook = XLSX.utils.book_new();
-                    const worksheet = XLSX.utils.json_to_sheet(reportData);
-                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Execution Report');
-                    XLSX.writeFile(workbook, 'qa_execution_report_' + currentTaskId + '_' + Date.now() + '.xlsx');
-                }
-            }
-
-            // NEW: Run fresh analysis
-            function runNewAnalysis() {
-                window.currentExecutionResult = null;
-                document.getElementById('resultsContainer').style.display = 'none';
-                startAnalysis(currentTaskId);
-            }
-
-            // NEW: Return to task selection
-            function returnToTasks() {
-                window.currentExecutionResult = null;
-                currentAnalysisResult = null;
-                currentTaskId = null;
-                document.getElementById('resultsContainer').style.display = 'none';
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
             
             function downloadReport() {
                 if (!currentAnalysisResult) return;
                 
-                try {
-                    const workbook = XLSX.utils.book_new();
-                    
-                    // Sheet 1: Analysis Summary (for records)
-                    const summaryData = [
-                        { 'Field': 'Task Type', 'Value': QA_TASKS[currentTaskId].name },
-                        { 'Field': 'Course ID', 'Value': courseId },
-                        { 'Field': 'Analyst', 'Value': userName },
-                        { 'Field': 'Date', 'Value': new Date().toLocaleDateString() },
-                        { 'Field': 'Time', 'Value': new Date().toLocaleTimeString() },
-                        { 'Field': 'Items Scanned', 'Value': currentAnalysisResult.summary?.pages_scanned || currentAnalysisResult.summary?.assignments_scanned || 0 },
-                        { 'Field': 'Issues Found', 'Value': (currentAnalysisResult.findings?.safe_actions?.length || 0) + (currentAnalysisResult.findings?.requires_manual_review?.length || 0) },
-                        { 'Field': 'Auto-Fixable', 'Value': currentAnalysisResult.findings?.safe_actions?.length || 0 },
-                        { 'Field': 'Manual Review', 'Value': currentAnalysisResult.findings?.requires_manual_review?.length || 0 }
-                    ];
-                    
-                    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-                    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-                    
-                    // Sheet 2: All Issues (for filtering/sorting)
-                    const allIssues = [
-                        ...(currentAnalysisResult.findings?.safe_actions || []).map(item => ({
-                            'Category': 'Auto-Fixable',
-                            'Priority': getEnhancedPriority(item),
-                            'Item Name': item.assignment_name || item.delete_page_title || 'Unknown',
-                            'Canvas Link': generateEnhancedCanvasLink(item),
-                            'Issue Description': item.reason || 'No description',
-                            'Item Type': item.assignment_name ? 'Assignment' : 'Page',
-                            'Item ID': item.assignment_id || item.page_id || 'N/A',
-                            'Risk Level': 'Low',
-                            'Action Required': 'Approve for execution'
-                        })),
-                        ...(currentAnalysisResult.findings?.requires_manual_review || []).map(item => ({
-                            'Category': 'Manual Review',
-                            'Priority': getEnhancedPriority(item),
-                            'Item Name': item.assignment_name || item.delete_page_title || 'Unknown',
-                            'Canvas Link': generateEnhancedCanvasLink(item),
-                            'Issue Description': item.reason || 'Requires investigation',
-                            'Item Type': item.assignment_name ? 'Assignment' : 'Page',
-                            'Item ID': item.assignment_id || item.page_id || 'N/A',
-                            'Risk Level': getEnhancedRiskLevel(item),
-                            'Action Required': 'Manual decision needed'
-                        }))
-                    ];
-                    
-                    if (allIssues.length > 0) {
-                        const issuesSheet = XLSX.utils.json_to_sheet(allIssues);
-                        XLSX.utils.book_append_sheet(workbook, issuesSheet, 'All Issues');
-                    }
-                    
-                    const timestamp = new Date().toISOString().slice(0,19).replace(/[:\-]/g, '');
-                    const filename = \`QA_Analysis_\${currentTaskId}_\${courseId}_\${timestamp}.xlsx\`;
-                    XLSX.writeFile(workbook, filename);
-                    
-                } catch (error) {
-                    console.warn('Enhanced report failed:', error);
-                    // Fallback to basic report
-                    const workbook = XLSX.utils.book_new();
-                    const worksheet = XLSX.utils.json_to_sheet([
-                        { 'Analysis Type': QA_TASKS[currentTaskId].name },
-                        { 'Course ID': courseId },
-                        { 'User': userName },
-                        { 'Timestamp': new Date().toISOString() }
-                    ]);
-                    XLSX.utils.book_append_sheet(workbook, worksheet, 'QA Report');
-                    XLSX.writeFile(workbook, 'qa_report_' + currentTaskId + '_' + Date.now() + '.xlsx');
-                }
+                const workbook = XLSX.utils.book_new();
+                const worksheet = XLSX.utils.json_to_sheet([
+                    { 'Analysis Type': QA_TASKS[currentTaskId].name },
+                    { 'Course ID': courseId },
+                    { 'User': userName },
+                    { 'Timestamp': new Date().toISOString() },
+                    {},
+                    ...currentAnalysisResult.findings.safe_actions.map(action => ({
+                        'Action Type': 'Safe Action',
+                        'Details': action.reason,
+                        'Assignment/Page': action.assignment_name || action.delete_page_title
+                    })),
+                    ...currentAnalysisResult.findings.requires_manual_review.map(action => ({
+                        'Action Type': 'Manual Review',
+                        'Details': action.reason,
+                        'Assignment/Page': action.assignment_name || action.delete_page_title
+                    }))
+                ]);
+                
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'QA Report');
+                XLSX.writeFile(workbook, 'qa_report_' + currentTaskId + '_' + Date.now() + '.xlsx');
             }
             
             function toggleAll(className, checked) {
@@ -1009,54 +727,14 @@ function generateEnhancedQADashboard(token) {
                 });
             }
             
-
-
-            // Helper functions for enhanced reports
-            function getEnhancedPriority(item) {
-                if (item.severity === 'High' || item.reason?.includes('error') || item.reason?.includes('broken')) return 'High';
-                if (item.severity === 'Medium' || item.reason?.includes('missing')) return 'Medium';
-                return 'Low';
-            }
-
-            function getEnhancedRiskLevel(item) {
-                if (item.reason?.includes('submissions') || item.reason?.includes('past due')) return 'High';
-                if (item.reason?.includes('official') || item.reason?.includes('links')) return 'Medium';
-                return 'Low';
-            }
-
-            function calculateEnhancedSuccessRate(result) {
-                const successful = result.summary?.successful || 0;
-                const failed = result.summary?.failed || 0;
-                const total = successful + failed;
-                return total > 0 ? Math.round((successful / total) * 100) : 0;
-            }
-
-            function generateEnhancedCanvasLink(item) {
-                const canvasBaseUrl = 'https://aculeo.test.instructure.com'; // Use the known Canvas URL
-                
-                if (item.assignment_id) {
-                    return \`\${canvasBaseUrl}/courses/\${courseId}/assignments/\${item.assignment_id}\`;
-                } else if (item.delete_page_url || item.page_url) {
-                    const pageUrl = item.delete_page_url || item.page_url;
-                    return \`\${canvasBaseUrl}/courses/\${courseId}/pages/\${pageUrl}\`;
-                } else if (item.page_id) {
-                    return \`\${canvasBaseUrl}/courses/\${courseId}/pages/\${item.page_id}\`;
-                } else {
-                    return \`\${canvasBaseUrl}/courses/\${courseId}\`;
-                }
-            }
-            
             return {
                 startAnalysis,
                 closePreview,
                 proceedWithAnalysis,
                 executeSelectedActions,
                 downloadReport,
-                downloadExecutionReport,
-                runNewAnalysis,
-                returnToTasks,
                 toggleAll,
-                initializeTaskCards
+                initializeTaskCards  // Add this
             };
         })();
         
@@ -1126,51 +804,14 @@ function getRealCourseId(token) {
 
 function getUserRole(token) {
   const roles = token.platformContext?.roles || []
-  
-  // Priority 1: Course-specific membership roles (mapped to Canvas People tab display names)
-  if (roles.some(role => role.includes('membership#Instructor'))) return 'Editing Lecturer'
-  if (roles.some(role => role.includes('membership#TeachingAssistant') || role.includes('membership#TA'))) return 'TA'
-  if (roles.some(role => role.includes('membership#Student'))) return 'Student'
-  if (roles.some(role => role.includes('membership#Administrator'))) return 'Administrator'
-  
-  // Priority 2: Institution-wide roles (mapped to Canvas display names)
-  if (roles.some(role => role.includes('institution') && role.includes('Instructor'))) return 'Editing Lecturer'
-  if (roles.some(role => role.includes('institution') && role.includes('TeachingAssistant'))) return 'TA'
-  if (roles.some(role => role.includes('institution') && role.includes('Student'))) return 'Student'
-  if (roles.some(role => role.includes('institution') && role.includes('Administrator'))) return 'Administrator'
-  
-  // Priority 3: Generic role fallback (mapped to Canvas display names)
-  if (roles.some(role => role.includes('Instructor'))) return 'Editing Lecturer'
+  if (roles.some(role => role.includes('Instructor'))) return 'Instructor'
+  if (roles.some(role => role.includes('TeachingAssistant'))) return 'TA'
   if (roles.some(role => role.includes('Student'))) return 'Student'
-  
   return 'User'
 }
 
 async function getRealUserName(token) {
-  // Priority order: LTI userInfo display name, constructed full name, then fallbacks
-  
-  // First priority: Use LTI userInfo.name (contains full display name like "Anwar BinUmer")
-  if (token.userInfo?.name) {
-    return token.userInfo.name;
-  }
-  
-  // Second priority: Construct from userInfo given_name + family_name
-  if (token.userInfo?.given_name || token.userInfo?.family_name) {
-    const fullName = [token.userInfo.given_name, token.userInfo.family_name].filter(n => n).join(' ');
-    if (fullName) return fullName;
-  }
-  
-  // Fallback to other token fields
-  const legacyFullName = [token.given_name, token.family_name].filter(n => n).join(' ');
-  const emailName = token.email ? token.email.split('@')[0] : null;
-  
-  return legacyFullName || 
-         token.name || 
-         token.nickname ||
-         token.preferred_username ||
-         emailName ||
-         token.platformContext?.lis?.person_sourcedid || 
-         'User';
+  return token.name || token.given_name || token.family_name || 'User'
 }
 
 // LTI Platform Setup
@@ -1179,8 +820,8 @@ const setup = async () => {
     // Deploy the LTI provider first
     await lti.deploy({ port: process.env.PORT || 3000 })
     console.log('🚀 QA Automation LTI Server running on port', process.env.PORT || 3000)
-    console.log('🔗 Tunnel URL: https://hon-episodes-municipality-wide.trycloudflare.com')
-    console.log('📝 Update Canvas Developer Key with: https://hon-episodes-municipality-wide.trycloudflare.com')
+    console.log('🔗 Tunnel URL: https://wait-bermuda-shaw-edges.trycloudflare.com')
+    console.log('📝 Update Canvas Developer Key with: https://wait-bermuda-shaw-edges.trycloudflare.com')
     
     // Then register the platform
     await lti.registerPlatform({
@@ -1199,4 +840,3 @@ const setup = async () => {
 }
 
 setup()
-
