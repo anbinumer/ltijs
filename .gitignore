@@ -1,3 +1,27 @@
+# OS (ignore only at repo root)
+/.DS_Store
+
+# Editor
+/.cursor/
+/.vscode/
+
+# Logs
+# Logs
+*.log
+/tunnel.log
+/tunnel_new.log
+
+# Generated reports
+/canvas_*.xlsx
+
+# Backups/restore points/checkpoints
+*.backup*
+*.checkpoint*
+*restore-point*
+
+# Local temp
+/temp/
+
 /node_modules
 .nyc_output
 coverage
