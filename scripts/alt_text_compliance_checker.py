@@ -4,7 +4,7 @@ Canvas Alt Text Compliance Checker - LTI Enhanced Version
 =========================================================
 
 A comprehensive tool that audits Canvas courses for alt text compliance with accessibility standards.
-Enhanced for LTI integration with Phase 2 preview-first workflow.
+Enhanced for LTI integration with Phase 2 preview-first workflow and parallel processing.
 
 Features:
 - Analyzes images within <figure> tags for alt text compliance
@@ -12,9 +12,17 @@ Features:
 - Provides safety-first analysis with clear categorization
 - Generates structured JSON output for LTI integration
 - Supports approved action execution mode
+- Parallel processing for faster data fetching and analysis
+- Thread-safe Canvas API operations
+
+Performance Enhancements:
+- Concurrent fetching of target course and design library pages
+- Parallel analysis of design standards and course compliance
+- Configurable rate limiting for Canvas API respect
+- Optimized thread pool management
 
 Author: ACU Canvas Tools Team
-Version: 2.0 (LTI Enhanced)
+Version: 2.1 (Parallel Processing Enhanced)
 Date: 2025-01-28
 """
 
@@ -26,6 +34,7 @@ import sys
 import argparse
 import hashlib
 import logging
+import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -34,7 +43,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 class CanvasAPIConnector:
-    """Canvas API connector with error handling and rate limiting"""
+    """Canvas API connector with error handling, rate limiting, and thread safety"""
     
     def __init__(self, base_url: str, api_token: str):
         self.base_url = base_url.rstrip('/')
@@ -46,34 +55,42 @@ class CanvasAPIConnector:
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
         
-        # Setup resilient session
-        self.session = requests.Session()
+        # Rate limiting configuration for concurrent requests
+        self.rate_limit_delay = 0.3  # Reduced from 0.5 for parallel processing
+        self.max_concurrent_requests = 3
+        
+    def _create_session(self) -> requests.Session:
+        """Create a new session for thread safety"""
+        session = requests.Session()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
-        self.session.mount('https://', HTTPAdapter(max_retries=retries))
-        self.session.headers.update({
-            'Authorization': f'Bearer {api_token}',
+        session.mount('https://', HTTPAdapter(max_retries=retries))
+        session.headers.update({
+            'Authorization': f'Bearer {self.api_token}',
             'Content-Type': 'application/json'
         })
+        return session
         
     def validate_connection(self) -> bool:
         """Test Canvas API connection"""
         try:
-            response = self.session.get(f"{self.base_url}/api/v1/users/self", timeout=30)
+            session = self._create_session()
+            response = session.get(f"{self.base_url}/api/v1/users/self", timeout=30)
             return response.status_code == 200
         except Exception as e:
             self.logger.error(f"❌ Canvas connection failed: {e}")
             return False
     
     def get_course_pages(self, course_id: str) -> List[Dict]:
-        """Get all pages from a course with content"""
+        """Get all pages from a course with content (thread-safe)"""
         try:
             pages = []
+            session = self._create_session()  # Thread-safe session
             url = f"{self.base_url}/api/v1/courses/{course_id}/pages"
             
             self.logger.info(f"📄 Fetching pages from course {course_id}...")
             
             while url:
-                response = self.session.get(url, timeout=30)
+                response = session.get(url, timeout=30)
                 if response.status_code != 200:
                     self.logger.warning(f"⚠ Failed to get pages: HTTP {response.status_code}")
                     break
@@ -89,7 +106,7 @@ class CanvasAPIConnector:
                         continue
 
                     self.logger.info(f"  📖 Processing page {i+1}/{len(page_list)}: {page_title}")
-                    page_response = self.session.get(
+                    page_response = session.get(
                         f"{self.base_url}/api/v1/courses/{course_id}/pages/{page['url']}", 
                         timeout=30
                     )
@@ -98,7 +115,7 @@ class CanvasAPIConnector:
                         full_page['course_id'] = course_id
                         full_page['page_url'] = f"{self.base_url}/courses/{course_id}/pages/{page['url']}"
                         pages.append(full_page)
-                    time.sleep(0.5)  # Rate limiting
+                    time.sleep(self.rate_limit_delay)  # Configurable rate limiting
                 
                 # Handle pagination
                 url = self._get_next_page_url(response.headers.get('Link', ''))
@@ -500,8 +517,39 @@ def generate_enhanced_analysis_output(compliance_results: List[Dict], design_sta
     
     return enhanced_output
 
+def fetch_course_pages_parallel(canvas_api: CanvasAPIConnector, course_ids: List[str]) -> Dict[str, List[Dict]]:
+    """Fetch pages from multiple courses in parallel"""
+    
+    def fetch_single_course(course_id: str) -> Tuple[str, List[Dict]]:
+        """Fetch pages for a single course"""
+        pages = canvas_api.get_course_pages(course_id)
+        return course_id, pages
+    
+    results = {}
+    
+    # Use ThreadPoolExecutor for parallel Canvas API calls
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # Submit tasks for parallel execution
+        future_to_course = {
+            executor.submit(fetch_single_course, course_id): course_id 
+            for course_id in course_ids
+        }
+        
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_course):
+            course_id = future_to_course[future]
+            try:
+                returned_course_id, pages = future.result()
+                results[returned_course_id] = pages
+                canvas_api.logger.info(f"✓ Completed fetching pages for Course {returned_course_id}")
+            except Exception as exc:
+                canvas_api.logger.error(f"❌ Course {course_id} generated an exception: {exc}")
+                results[course_id] = []  # Empty list on failure
+    
+    return results
+
 def main():
-    """Main execution function with LTI integration support"""
+    """Main execution function with LTI integration support and parallel processing"""
     
     parser = argparse.ArgumentParser(description='Canvas Alt Text Compliance Checker - LTI Enhanced')
     parser.add_argument('--canvas-url', required=True, help='Canvas base URL')
@@ -524,35 +572,62 @@ def main():
             print("❌ Canvas API connection failed.")
             sys.exit(1)
         
-        # Fetch course pages
-        course_pages = canvas_api.get_course_pages(args.course_id)
+        print("🚀 Starting parallel data fetching...")
+        print(f"📚 Fetching target course ({args.course_id}) and design library (26333) simultaneously...")
+        
+        # Fetch both courses in parallel
+        start_time = time.time()
+        course_data = fetch_course_pages_parallel(
+            canvas_api, 
+            [args.course_id, '26333']
+        )
+        fetch_time = time.time() - start_time
+        
+        # Extract results
+        course_pages = course_data.get(args.course_id, [])
+        design_library_pages = course_data.get('26333', [])
+        
+        print(f"⚡ Parallel fetch completed in {fetch_time:.1f} seconds")
+        
         if not course_pages:
             print(f"❌ Could not access Course {args.course_id}")
             sys.exit(1)
         
-        # Access ACU Online Design Library (Course 26333)
-        design_library_pages = canvas_api.get_course_pages('26333')
         if not design_library_pages:
-            print("⚠️  Could not access ACU Online Design Library")
-            design_library_pages = []  # Continue without standards
+            print("⚠️  Could not access ACU Online Design Library - continuing with fallback standards")
         
         # Perform analysis
+        print("🔍 Analyzing alt text compliance...")
         analyzer = AltTextAnalyzer()
-        if design_library_pages:
-            design_standards = analyzer.extract_design_standards(design_library_pages)
-        else:
-            design_standards = {'good_alt_text_examples': [], 'decorative_examples': []}
         
-        compliance_results = analyzer.analyze_content_compliance(
-            course_pages, 
-            f"Course {args.course_id}"
-        )
+        # Process design standards and course analysis in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both analysis tasks
+            if design_library_pages:
+                standards_future = executor.submit(analyzer.extract_design_standards, design_library_pages)
+            else:
+                standards_future = None
+                
+            compliance_future = executor.submit(
+                analyzer.analyze_content_compliance,
+                course_pages, 
+                f"Course {args.course_id}"
+            )
+            
+            # Collect results
+            if standards_future:
+                design_standards = standards_future.result()
+            else:
+                design_standards = {'good_alt_text_examples': [], 'decorative_examples': []}
+                
+            compliance_results = compliance_future.result()
         
         # Generate enhanced output
         course_info = {
             'course_id': args.course_id,
             'name': f"Course {args.course_id}",
-            'pages_analyzed': len(course_pages)
+            'pages_analyzed': len(course_pages),
+            'processing_time_seconds': round(fetch_time, 1)
         }
         
         enhanced_output = generate_enhanced_analysis_output(
