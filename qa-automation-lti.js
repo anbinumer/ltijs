@@ -307,6 +307,12 @@ const QA_TASKS = {
     description: 'Finds and safely removes "(ACU Online, YYYY)" attributions from the course syllabus with preview and approval.',
     category: 'Syllabus',
     script: 'syllabus_acuo_attribution_remover.py'
+  },
+  'figcaption-compliance-checker': {
+    name: 'Figcaption Compliance Checker',
+    description: 'Checks figcaptions for images and videos for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
+    category: 'Media',
+    script: 'figcaption_compliance_checker.py'
   }
 }
 
@@ -515,6 +521,12 @@ function generateEnhancedQADashboard(token) {
                     description: 'Finds and safely removes "(ACU Online, YYYY)" attributions from the course syllabus with preview and approval.',
                     category: 'Syllabus',
                     script: 'syllabus_acuo_attribution_remover.py'
+                },
+                'figcaption-compliance-checker': {
+                    name: 'Figcaption Compliance Checker',
+                    description: 'Checks figcaptions for images and videos for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
+                    category: 'Media',
+                    script: 'figcaption_compliance_checker.py'
                 }
             };
             
@@ -562,6 +574,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateRubricCleanupResultsHtml(result);
                 } else if (taskId === 'syllabus-acuo-attribution-remover') {
                     contentHtml = generateSyllabusAttributionResultsHtml(result);
+                } else if (taskId === 'figcaption-compliance-checker') {
+                    contentHtml = generateFigcaptionComplianceResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -942,6 +956,122 @@ function generateEnhancedQADashboard(token) {
                     <div style=\"margin-top: 24px; text-align: right;\">\n
                         <button class=\"btn-secondary\" onclick=\"QAApp.downloadReport()\">📄 Download Report</button>\n
                         <button class=\"btn-primary\" onclick=\"QAApp.executeSelectedActions()\">Execute Selected Actions</button>\n
+                    </div>\`;
+
+                return html;
+            }
+
+            // --- NEW: Renderer for Figcaption Compliance Checker ---
+            function generateFigcaptionComplianceResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { items_scanned = 0, issues_found = 0, manual_review_needed = 0, media_breakdown = {} } = result.summary || {};
+                const { design_standards_info = {} } = result;
+
+                let html = \`
+                    <div style="background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-deep-purple);">
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="font-size: 20px; margin-right: 12px;">🎨</span>
+                            <h3 style="margin: 0; color: var(--acu-deep-purple); font-size: 18px;">Figcaption Compliance Analysis Complete</h3>
+                        </div>
+                        <p style="margin: 0; color: var(--acu-purple); font-size: 14px; line-height: 1.5;">
+                            Analyzed <strong>\${items_scanned} media elements</strong> across course pages for ACU Online Design Library compliance. 
+                            \${design_standards_info.standards_extracted ? 'Successfully accessed design standards.' : 'Used fallback standards.'}
+                        </p>
+                    </div>\`;
+
+                // Media breakdown summary
+                if (media_breakdown.images || media_breakdown.videos) {
+                    html += \`
+                    <div class="result-section severity-low">
+                        <h4>📊 Media Analysis Summary</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0;">
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-deep-purple);">\${media_breakdown.images || 0}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Images</div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-deep-purple);">\${media_breakdown.videos || 0}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Videos</div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-red);">\${issues_found}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Issues Found</div>
+                            </div>
+                        </div>
+                    </div>\`;
+                }
+                
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class="result-section severity-medium">
+                        <h4>📋 Figcaption Issues Requiring Manual Fixes (\${requires_manual_review.length})</h4>
+                        <p>Canvas API limitations prevent automatic figcaption updates. These issues require manual editing in Canvas:</p>
+                        
+                        <div class="manual-steps">
+                            <h5>🔧 Step-by-Step Fix Process:</h5>
+                            <ol>
+                                <li><strong>Open the page</strong> - Click on any issue below to open the page in Canvas</li>
+                                <li><strong>Switch to HTML editor</strong> - Click the HTML editor button in Canvas</li>
+                                <li><strong>Locate the media element</strong> - Find the image or video</li>
+                                <li><strong>Wrap in figure tag</strong> - Ensure media is within &lt;figure&gt; element</li>
+                                <li><strong>Add/modify figcaption</strong> - Add or update the &lt;figcaption&gt; element</li>
+                                <li><strong>Apply styling</strong> - Add CSS classes: "sm-font", "text-muted"</li>
+                                <li><strong>Include citation</strong> - Add proper citation: "(Source, Year)"</li>
+                                <li><strong>Save and publish</strong> - Save changes and publish the page</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="examples">
+                            <h5>💡 Examples:</h5>
+                            <div class="example-item">
+                                <strong>✅ Good:</strong> <code>&lt;figcaption class="sm-font text-muted"&gt;Figure 1: Student Learning Outcomes (ACU Online, 2024)&lt;/figcaption&gt;</code>
+                            </div>
+                            <div class="example-item">
+                                <strong>❌ Bad:</strong> <code>&lt;figcaption&gt;Image description&lt;/figcaption&gt;</code>
+                            </div>
+                            <div class="example-item">
+                                <strong>❌ Missing:</strong> No figcaption element found
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 16px;">
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class="action-item clickable" onclick="QAApp.openCanvasPage('\${item.page_url}')" style="cursor: pointer;">
+                                <div class="action-content">
+                                    <strong>Page:</strong> "\${item.page_title}"<br>
+                                    <strong>Media Type:</strong> \${item.media_type}<br>
+                                    <strong>Issue:</strong> \${item.description}<br>
+                                    <strong>Current:</strong> \${item.current_value}<br>
+                                    <strong>Suggested:</strong> \${item.suggested_value}<br>
+                                    <small><strong>Fix:</strong> \${item.recommendation}</small>
+                                </div>
+                                <div class="action-icon">🔗</div>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+                
+                if (requires_manual_review.length === 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4>🎉 All Figcaptions Compliant!</h4>
+                        <p>All media elements in your course have proper figcaptions that meet ACU Online Design Library standards.</p>
+                        <div style="margin-top: 12px;">
+                            <strong>✅ Compliance Features Found:</strong>
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li>Proper ACU styling classes applied</li>
+                                <li>Descriptive caption text provided</li>
+                                <li>Appropriate citation format used</li>
+                                <li>Accessibility standards met</li>
+                            </ul>
+                        </div>
+                    </div>\`;
+                }
+
+                html += \`
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
                     </div>\`;
 
                 return html;
@@ -1534,6 +1664,11 @@ function generateEnhancedQADashboard(token) {
                                     '<li>Classify occurrences into safe removals vs manual review</li>' +
                                     '<li>Provide risk assessment and excerpts for confidence</li>' +
                                     '<li>Execute only approved removals with hash-safety</li>' :
+                                    taskId === 'figcaption-compliance-checker' ?
+                                    '<li>Access ACU Online Design Library for figcaption standards</li>' +
+                                    '<li>Analyze images and videos within course pages</li>' +
+                                    '<li>Check figcaption presence and styling compliance</li>' +
+                                    '<li>Provide detailed recommendations for accessibility</li>' :
                                     '<li>Perform comprehensive analysis</li>' +
                                     '<li>Check for potential issues</li>' +
                                     '<li>Identify areas for improvement</li>' +
