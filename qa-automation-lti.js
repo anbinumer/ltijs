@@ -295,6 +295,12 @@ const QA_TASKS = {
     description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
     category: 'Cleanup',
     script: 'empty_groups_modules_cleaner.py'
+  },
+  'rubric-cleanup': {
+    name: 'Rubric Cleanup',
+    description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
+    category: 'Rubric Cleanup',
+    script: 'rubric_cleanup_analyzer.py'
   }
 }
 
@@ -491,6 +497,12 @@ function generateEnhancedQADashboard(token) {
                     description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
                     category: 'Cleanup',
                     script: 'empty_groups_modules_cleaner.py'
+                },
+                'rubric-cleanup': {
+                    name: 'Rubric Cleanup',
+                    description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
+                    category: 'Rubric Cleanup',
+                    script: 'rubric_cleanup_analyzer.py'
                 }
             };
             
@@ -534,6 +546,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateTableCaptionResultsHtml(result);
                 } else if (taskId === 'remove-empty-groups-modules') {
                     contentHtml = generateEmptyGroupsModulesResultsHtml(result);
+                } else if (taskId === 'rubric-cleanup') {
+                    contentHtml = generateRubricCleanupResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -858,6 +872,71 @@ function generateEnhancedQADashboard(token) {
                         <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
                         <button class="btn-primary" onclick="QAApp.showManualGuidance()">📋 Show Manual Fixes Guide</button>
                     </div>\`;
+                return html;
+            }
+
+            // --- NEW: Renderer for Rubric Cleanup ---
+            function generateRubricCleanupResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { rubrics_scanned = 0, safe_actions_found = 0, manual_review_needed = 0 } = result.summary || {};
+
+                let html = \`<p>Analyzed \${rubrics_scanned} rubrics. Found \${safe_actions_found} safe deletions and \${manual_review_needed} items for manual review.</p>\`;
+
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class=\"result-section severity-medium\">
+                        <h4><input type=\"checkbox\" onchange=\"QAApp.toggleAll('manualReviewChecks', this.checked)\"> 👥 Manual Review Required (\${manual_review_needed})</h4>
+                        <p>Duplicates, protected items, or outdated rubrics that may need human decision.</p>
+                        <div>
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class=\"action-item\">
+                                <input type=\"checkbox\" class=\"manualReviewChecks\" data-action-index=\"\${index}\" id=\"manual_\${index}\">
+                                <label for=\"manual_\${index}\">
+                                    \${item.type === 'duplicate_rubric_group' ? \`
+                                        <strong>Duplicate Group:</strong> Keep \"\${item.keep_rubric_title}\"<br>
+                                        <small>Delete candidates: \${(item.delete_candidates||[]).map(c => \`#\${c.rubric_id} \${c.rubric_title}\`).join(', ') || 'N/A'}</small>
+                                    \` : \`
+                                        <strong>Rubric:</strong> \"\${item.rubric_title || 'Unknown'}\"<br>
+                                        <small>\${item.reason || 'Review recommended'}</small>
+                                    \`}
+                                </label>
+                                \${item.canvas_url ? \`<div class=\"action-icon\"><a href=\"\${item.canvas_url}\" target=\"_blank\" rel=\"noopener\">🔗</a></div>\` : ''}
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class=\"result-section severity-safe\">
+                        <h4><input type=\"checkbox\" onchange=\"QAApp.toggleAll('safeActionChecks', this.checked)\" checked> ✅ Safe Deletions Staged (\${safe_actions_found || safe_actions.length})</h4>
+                        <p>These rubrics have no associations or usage and are old enough to be safely removed.</p>
+                        <div>
+                        \${safe_actions.map((action, index) => \`
+                            <div class=\"action-item\">
+                                <input type=\"checkbox\" class=\"safeActionChecks\" data-action-index=\"\${index}\" id=\"safe_\${index}\" checked>
+                                <label for=\"safe_\${index}\">
+                                    <strong>Rubric:</strong> \"\${action.rubric_title}\" (ID: \${action.rubric_id})<br>
+                                    <small>\${action.reason || 'Safe to delete'}</small>
+                                </label>
+                                \${action.canvas_url ? \`<div class=\"action-icon\"><a href=\"\${action.canvas_url}\" target=\"_blank\" rel=\"noopener\">🔗</a></div>\` : ''}
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length === 0 && requires_manual_review.length === 0) {
+                    html += \`<div class=\"result-section severity-safe\"><h4>🎉 Nothing to Clean!</h4><p>No rubrics require attention.</p></div>\`;
+                }
+
+                html += \`
+                    <div style=\"margin-top: 24px; text-align: right;\">
+                        <button class=\"btn-secondary\" onclick=\"QAApp.downloadReport()\">📄 Download Report</button>
+                        <button class=\"btn-primary\" onclick=\"QAApp.executeSelectedActions()\">Delete Selected Rubrics</button>
+                    </div>\`;
+
                 return html;
             }
             
