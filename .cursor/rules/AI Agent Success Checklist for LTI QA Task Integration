@@ -1,0 +1,238 @@
+# AI Agent Success Checklist for LTI QA Task Integration
+
+## 🎯 **The Winning Formula That Delivered One-Shot Success**
+
+**Analysis First + Modular Architecture + Enhanced Implementation = Perfect Integration**
+
+This checklist documents the exact approach that led to flawless integration of the title alignment checker. Follow these patterns for guaranteed success.
+
+**🏗️ For core architecture rules and patterns, see: [lti-guard-rail.mdc](./lti-guard-rail.mdc)**
+
+---
+
+## 📋 **Phase 1: Pre-Development Analysis (CRITICAL)**
+
+- [ ] Confirm application of the principle: Deep Analysis + Strict Architecture + Thoughtful Enhancement for this candidate script
+  
+### **✅ 1. Deep Functional Understanding**
+- [ ] **Study the standalone script thoroughly** - Don't just skim, understand every function
+- [ ] **Identify all QA tasks performed** - List each specific check and validation
+- [ ] **Map Canvas API requirements** - Which endpoints are needed?
+- [ ] **Understand data flow** - How does input become output?
+- [ ] **Clarify execution model** - Analysis-only vs. automated fixes?
+
+**🚨 CRITICAL:** Spend 30-45 minutes on this. Most integration failures come from insufficient understanding.
+
+### **✅ 2. Architecture Documentation Review**
+- [ ] **Read LTI-QA-Architecture.md completely** - Not just the summary
+- [ ] **Study existing integration patterns** - How does duplicate_page_cleaner.py work?
+- [ ] **Identify exact integration points** - QA_TASKS, analyzeTask(), frontend functions
+- [ ] **Plan unique naming conventions** - Avoid any name conflicts
+- [ ] **Understand JSON output contracts** - ENHANCED_ANALYSIS_JSON format
+
+**Success Pattern:** Reference implementation study prevents architectural mistakes.
+
+### **✅ 3. Scope and Boundaries Definition**
+- [ ] **Define what the script WILL do** - Be specific about functionality
+- [ ] **Define what the script WON'T do** - Avoid scope creep
+- [ ] **Identify risk categories** - High/medium/low severity issues
+- [ ] **Plan user experience flow** - Preview → Analysis → Manual Review
+- [ ] **Confirm Canvas API permissions needed** - Can we access required data?
+
+**Success Pattern:** Clear boundaries prevent feature bloat and integration complexity.
+
+---
+
+## 📝 **Phase 2: Development Execution (DISCIPLINED)**
+
+### **✅ 4. Strict Modular Development**
+- [ ] **Create entirely new Python file** - Never modify existing scripts
+- [ ] **Use unique class names** - Avoid any naming conflicts
+- [ ] **Follow established argument patterns** - --canvas-url, --api-token, --course-id, --analyze-only
+- [ ] **Implement standard error handling** - Try/catch with structured JSON output
+- [ ] **Use consistent logging patterns** - stderr for logs, stdout for JSON
+
+```python
+# ✅ WINNING PATTERN - Follow this structure exactly
+class UniqueTaskChecker:  # Always unique name
+    def __init__(self, base_url: str, api_token: str):
+        # Standard initialization pattern
+        pass
+    
+    def analyze_course(self, course_id: str) -> Dict:
+        # Main analysis logic
+        pass
+    
+    def _create_analysis_result(self, course_id: str, course_name: str, sis_id: str, 
+                               findings: Dict = None, error: str = None) -> Dict:
+        # Standard result formatting
+        return {
+            "success": True,
+            "phase": 2,
+            "mode": "analysis_only",
+            "findings": {
+                "safe_actions": [],
+                "requires_manual_review": manual_review_items
+            }
+        }
+```
+
+### **✅ 5. Enhanced Implementation Strategy**
+- [ ] **Identify improvement opportunities** - Better parsing, smarter logic, robust error handling
+- [ ] **Add comprehensive edge case handling** - Malformed data, API failures, empty results
+- [ ] **Implement detailed logging** - Debug-level information for troubleshooting
+- [ ] **Create human-readable results** - Clear explanations, actionable recommendations
+- [ ] **Validate all assumptions** - Don't assume perfect input data
+
+**Success Pattern:** Enhance rather than just copy. The title alignment checker's improved syllabus parsing was key to its success.
+
+### **✅ 6. LTI Integration Compliance**
+- [ ] **Follow exact JSON output format** - ENHANCED_ANALYSIS_JSON: prefix
+- [ ] **Use standard error format** - CRITICAL_ERROR_JSON: prefix
+- [ ] **Implement proper Canvas API session management** - Retry logic, timeout handling
+- [ ] **Handle authentication properly** - API token validation
+- [ ] **Output to correct streams** - JSON to stdout, logs to stderr
+
+```python
+# ✅ WINNING PATTERN - Exact output format
+try:
+    analysis_result = checker.analyze_course(args.course_id)
+    print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_result, indent=2))
+except Exception as e:
+    error_output = {
+        "success": False,
+        "error": str(e),
+        "phase": 2,
+        "mode": "analysis_only"
+    }
+    print(f"CRITICAL_ERROR_JSON: {json.dumps(error_output)}", file=sys.stdout)
+    sys.exit(1)
+```
+
+---
+
+## 🔍 **Phase 3: Quality Assurance (COMPREHENSIVE)**
+
+### **✅ 7. Human-Centered Result Formatting**
+- [ ] **Provide clear explanations** - Why is this an issue?
+- [ ] **Include actionable recommendations** - What should the user do?
+- [ ] **Categorize by severity and priority** - High/medium/low impact
+- [ ] **Add similarity scores and detailed comparisons** - Help users understand differences
+- [ ] **Create meaningful summaries** - Course health metrics, consistency rates
+
+**Success Pattern:** Users need to understand and trust the analysis results.
+
+### **✅ 8. Comprehensive Edge Case Handling**
+- [ ] **Handle empty or missing syllabus content** - Graceful degradation
+- [ ] **Manage API failures and timeouts** - Retry logic and clear error messages
+- [ ] **Process malformed HTML tables** - Skip invalid rows, log issues
+- [ ] **Deal with unexpected module naming patterns** - Flexible regex patterns
+- [ ] **Validate Canvas API responses** - Check for required fields
+
+**Success Pattern:** Real-world data is messy. Robust handling prevents failures.
+
+### **✅ 9. Integration Verification**
+- [ ] **Test JSON output parsing** - Ensure LTI can consume the results
+- [ ] **Verify Canvas API calls work** - Test with real course data
+- [ ] **Check error handling paths** - Confirm graceful failure modes
+- [ ] **Validate logging output** - Ensure debugging information is available
+- [ ] **Test with edge case data** - Empty courses, malformed content
+
+---
+
+## 🚀 **Phase 4: Integration Success Validation**
+
+### **✅ 10. LTI Backend Integration Points**
+- [ ] **Add task to QA_TASKS object** - Unique ID, clear name and description
+- [ ] **Extend analyzeTask() function** - New case in switch statement
+- [ ] **Test script execution path** - Verify arguments and output parsing
+- [ ] **Confirm error handling** - Both script errors and execution failures
+- [ ] **Validate JSON parsing** - Ensure frontend can consume results
+
+```javascript
+// ✅ WINNING PATTERN - Exact integration format
+const QA_TASKS = {
+  'check-title-alignment': {  // ✅ Unique, descriptive ID
+    name: 'Check Course Title Alignment',
+    description: 'Analyzes syllabus schedule against module titles and validates style compliance for consistency.',
+    category: 'Content Management',
+    script: 'title_alignment_checker.py'  // ✅ Exact script filename
+  }
+}
+```
+
+### **✅ 11. Frontend Integration (Future)**
+- [ ] **Plan preview function** - generateTitleAlignmentAnalysisPreview()
+- [ ] **Plan results function** - generateEnhancedTitleAlignmentResults()
+- [ ] **Design progress messages** - Task-specific status updates
+- [ ] **Create consistent UI patterns** - Match existing task styling
+- [ ] **Plan user interaction flows** - Preview → Analysis → Manual Review
+
+---
+
+## 🎯 **Critical Success Principles**
+
+### **🏆 The Big Three That Guarantee Success:**
+
+1. **UNDERSTAND DEEPLY FIRST**
+   - Spend quality time analyzing the standalone script
+   - Map all functionality before writing code
+   - Identify enhancement opportunities
+
+2. **FOLLOW PATTERNS RELIGIOUSLY**
+   - Use the architecture documentation as gospel
+   - Copy successful patterns exactly
+   - Never modify existing code
+
+3. **ENHANCE THOUGHTFULLY**
+   - Improve error handling and edge cases
+   - Add human-centered explanations
+   - Create comprehensive logging
+
+### **🚨 Critical Don'ts That Cause Failures:**
+
+- ❌ **Don't skip the analysis phase** - Understanding first prevents rework
+- ❌ **Don't modify existing files** - Breaks the modular architecture
+- ❌ **Don't invent new patterns** - Use established conventions
+- ❌ **Don't assume perfect data** - Real-world data is messy
+- ❌ **Don't rush the implementation** - Quality over speed
+
+---
+
+## 📊 **Success Metrics**
+
+### **✅ You Know You're Successful When:**
+
+**Technical Validation:**
+- [ ] Script runs without errors on first execution
+- [ ] JSON output parses correctly in LTI framework
+- [ ] Canvas API calls complete successfully
+- [ ] Error handling works for all failure modes
+- [ ] Logging provides useful debugging information
+
+**Integration Validation:**
+- [ ] Task appears in QA dashboard correctly
+- [ ] Analysis phase provides meaningful results
+- [ ] Manual review items are actionable
+- [ ] Results match user expectations
+- [ ] No conflicts with existing functionality
+
+**User Experience Validation:**
+- [ ] Results are easy to understand
+- [ ] Recommendations are actionable
+- [ ] Priority levels make sense
+- [ ] Summary metrics are meaningful
+- [ ] Error messages are helpful
+
+---
+
+## 🎉 **The Winning Formula**
+
+**Analysis First (45 min) + Modular Architecture (100% compliance) + Enhanced Implementation (thoughtful improvements) = One-Shot Success**
+
+This formula delivered perfect results because it combines:
+- **Thorough preparation** to understand the problem
+- **Disciplined execution** following established patterns
+- **User-centered enhancement** to add real value
+
+Follow this checklist for guaranteed one-shot success on every LTI QA task integration! 🚀

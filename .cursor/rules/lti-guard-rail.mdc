@@ -1,0 +1,607 @@
+---
+alwaysApply: false
+---
+## 🎯 LTI QA TASK INTEGRATION SUCCESS METHODOLOGY
+
+### **MANDATORY: Follow This Exact Process for One-Shot Success**
+
+**📚 Related Documentation:**
+- **Safety Focus**: [LTI QA Integration Safety Rules.mdc](./LTI%20QA%20Integration%20Safety%20Rules.mdc) - Critical safety patterns based on real integration issues
+- **Design Philosophy**: [LTI Design Principles.md](./LTI%20Design%20Principles.md) - Human-centered design within Canvas technical constraints  
+- **Technical Architecture**: [LTI-QA-Architecture.md](./LTI-QA-Architecture.md) - Detailed modular architecture and integration patterns
+
+### 🚩 MANDATORY INTEGRATION PRINCIPLE (Use for ANY new standalone script)
+
+**Deep Analysis + Strict Architecture + Thoughtful Enhancement**
+
+- Deep Analysis: Thoroughly study the standalone script, map Canvas API usage, data flows, and risks before coding.
+- Strict Architecture: Follow the established Phase 2 “preview-first” workflow, two-mode CLI, JSON contracts, and additive-only integration.
+- Thoughtful Enhancement: Add HCD safety/UX improvements, guardrails, clear reasoning, and robust error handling.
+
+Agents MUST apply this triad whenever a new standalone script is proposed for LTI integration. Alias mapping used across docs: Analysis First + Modular Architecture + Enhanced Implementation.
+
+**Phase 1: Pre-Development Analysis (45 minutes minimum)**
+- [ ] **Study standalone script completely** - understand every function, class, and data flow
+- [ ] **Map all QA tasks and Canvas API requirements** - identify endpoints, data structures, error scenarios  
+- [ ] **Review LTI-QA-Architecture.md thoroughly** - understand integration patterns and constraints
+- [ ] **Plan unique naming conventions** - avoid conflicts with existing code
+- [ ] **Define clear scope boundaries** - analysis-only vs execution, safe actions vs manual review
+
+**Phase 2: Development Execution**
+- [ ] **Create entirely NEW Python file** - never modify existing working scripts
+- [ ] **Follow established patterns exactly** - no improvisation on proven architecture  
+- [ ] **Enhance thoughtfully** - improve error handling, user experience, and edge cases
+- [ ] **Use standard JSON output format** - ENHANCED_ANALYSIS_JSON: with required structure
+- [ ] **Implement comprehensive validation** - API errors, missing data, timeouts
+
+**Phase 3: Integration Validation**
+- [ ] **Verify JSON output parses correctly** - test with real Canvas data
+- [ ] **Test Canvas API calls comprehensively** - handle rate limits and failures
+- [ ] **Validate human-readable result formatting** - ensure actionable, trustworthy output
+- [ ] **Confirm zero conflicts** - existing functionality remains unchanged
+
+### **CRITICAL SUCCESS FACTORS:**
+1. **🧠 Understand Deeply First** - 80% of success comes from thorough preparation
+2. **🏗️ Follow Architecture Religiously** - Never deviate from established patterns  
+3. **✨ Enhance User Experience** - Make results actionable, trustworthy, and anxiety-reducing
+4. **🔍 Validate Comprehensively** - Test edge cases, API failures, and real-world scenarios
+
+### **SUCCESS METRICS:**
+- ✅ Integration works perfectly on first attempt
+- ✅ Zero modifications to existing functionality required
+- ✅ User experience feels identical to existing tools
+- ✅ Results are immediately actionable and trustworthy
+
+**This methodology delivered perfect first-attempt results for `title_alignment_checker.py` integration.**
+
+**📋 For detailed step-by-step implementation guidance, see: [AI Agent Success Checklist for LTI QA Task Integration](./.cursor/rules/AI%20Agent%20Success%20Checklist%20for%20LTI%20QA%20Task%20Integration)**
+
+---
+
+## 🏗️ MANDATORY ARCHITECTURE PATTERNS
+
+**📋 Detailed Reference**: [LTI-QA-Architecture.md](./LTI-QA-Architecture.md) provides comprehensive architecture documentation, file structure, and scalability guidelines.
+
+### Phase 2 Workflow Implementation (REQUIRED)
+```javascript
+// REQUIRED: Follow this exact pattern for ANY new script
+lti.app.post('/execute', async (req, res) => {
+  // Phase 2: Always analyze first (preview-first workflow)
+  const analysisResult = await analyzeTask(taskId, courseId, userId)
+  res.json({ 
+    success: true, 
+    phase: 2,
+    mode: 'preview_first',
+    taskId,
+    result: analysisResult 
+  })
+})
+
+lti.app.post('/execute-approved', async (req, res) => {
+  // Phase 2: Execute only approved actions
+  const result = await executeApprovedActions(taskId, courseId, userId, approvedActions)
+})
+```
+
+### Python Script Integration Standards (REQUIRED)
+```python
+# REQUIRED: Your Python script MUST support these arguments
+parser.add_argument('--analyze-only', action='store_true', help='Only analyze, do not execute')
+parser.add_argument('--check-inbound-links', action='store_true', help='Check for inbound links')
+parser.add_argument('--risk-assessment', action='store_true', help='Assess risks')
+parser.add_argument('--execute-approved', type=str, help='Execute only approved actions from JSON file')
+
+# REQUIRED: Your script MUST output this JSON format
+enhanced_output = {
+    "phase": 2,
+    "mode": "preview_first",
+    "analysis_complete": True,
+    "findings": {
+        "safe_actions": safe_actions,           # Actions ready for auto-execution
+        "requires_manual_review": manual_review # Actions needing user decision
+    },
+    "risk_assessment": {
+        "protected_by_links": count,
+        # Add script-specific risk metrics
+    }
+}
+print("ENHANCED_ANALYSIS_JSON:", json.dumps(enhanced_output))
+```
+
+---
+
+## 🎨 UI/UX CONSISTENCY REQUIREMENTS
+
+**📖 See Also**: [LTI Design Principles.md](./LTI%20Design%20Principles.md) for comprehensive human-centered design guidelines within Canvas constraints.
+
+### Task Card Integration
+```javascript
+// ADD your new task to QA_TASKS object following this pattern:
+const QA_TASKS = {
+  'your-new-task-id': {
+    name: 'Human-Readable Task Name',
+    description: 'Clear description of what this automates',
+    category: 'Content Management', // or appropriate category
+    mvp: true
+  }
+}
+```
+
+### Analysis Preview Modal (REQUIRED)
+```javascript
+// REQUIRED: Create preview function following this naming pattern
+function generateYourTaskAnalysisPreview() {
+  return `
+    <!-- REQUIRED: Confidence-building header -->
+    <div style="background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-deep-purple);">
+      <div style="display: flex; align-items: center; margin-bottom: 12px;">
+        <span style="font-size: 20px; margin-right: 12px;">[EMOJI]</span>
+        <h3 style="margin: 0; color: var(--acu-deep-purple); font-size: 18px;">[Task-Specific Title]</h3>
+      </div>
+      <p style="margin: 0; color: var(--acu-purple); font-size: 14px; line-height: 1.5;">
+        [Confidence-building description with <strong>safety assurance</strong>]
+      </p>
+    </div>
+    
+    <!-- REQUIRED: What This Analysis Will Do section -->
+    <!-- REQUIRED: Step-by-Step Process section -->
+    <!-- REQUIRED: Safety Assurance section -->
+  `;
+}
+```
+
+### Required CSS Variables
+```css
+/* REQUIRED: Use these exact color variables */
+--acu-deep-purple: #4A1A4A;    /* Primary actions */
+--acu-purple: #6B2C6B;         /* Secondary text */
+--acu-red: #D2492A;            /* Destructive actions */
+--acu-gold: #F4B942;           /* Warnings/attention */
+--acu-cream: #F9F4F1;          /* Backgrounds */
+--acu-cream-light: #F4ECE6;    /* Light backgrounds */
+```
+
+---
+
+## 🧠 HUMAN-CENTERED DESIGN CHECKLIST
+
+**🎯 Design Philosophy**: [LTI Design Principles.md](./LTI%20Design%20Principles.md) provides the complete framework for human-centered design within Canvas technical reality.
+
+### ✅ REQUIRED: Anxiety Reduction
+- [ ] **Preview First**: User sees exactly what will happen before any changes
+- [ ] **Clear Progress**: Step-by-step process explanation with time estimates
+- [ ] **Safety Messaging**: Explicit statements about what won't be affected
+- [ ] **Confidence Building**: Success rates and "ready for action" metrics
+- [ ] **Escape Hatches**: "Review Later" and cancel options at every step
+
+### ✅ REQUIRED: Cognitive Load Reduction
+- [ ] **Categorized Results**: Safe actions vs manual review vs protected items
+- [ ] **Visual Hierarchy**: Most important actions prominently displayed
+- [ ] **Progressive Disclosure**: Details hidden behind collapsible sections
+- [ ] **Action-Oriented Language**: "Remove 5 duplicates" not "5 duplicates found"
+- [ ] **Time Estimates**: "Est. 3 minutes" for manual review sections
+
+### ✅ REQUIRED: Trust Building
+- [ ] **Detailed Reasoning**: Why each action is recommended
+- [ ] **Link Protection**: Clear messaging about preserved content
+- [ ] **Manual Override**: User controls every destructive action
+- [ ] **Audit Trail**: Downloadable reports with full traceability
+- [ ] **Failure Handling**: Graceful error messages with next steps
+
+---
+
+## 🔄 TDC METHODOLOGY INTEGRATION (Test-Driven-Development Cycle)
+
+### TDC Phase 1: THINK (Analysis & Planning)
+**BEFORE writing any code:**
+- [ ] Study `duplicate_page_cleaner.py` patterns thoroughly
+- [ ] Identify Canvas API endpoints needed
+- [ ] Define "safe actions" vs "manual review" criteria
+- [ ] Plan unique naming conventions
+- [ ] Map integration points without modifying existing code
+
+### TDC Phase 2: DEVELOP (Implementation)
+**Create incrementally, test each component:**
+
+#### Component 1: Python Script Foundation
+```python
+# Test: Script accepts required arguments
+python new_script.py --analyze-only --help
+```
+- [ ] Argument parsing implemented
+- [ ] Basic Canvas API connection works
+- [ ] JSON output format matches requirements
+
+#### Component 2: Analysis Logic
+```python
+# Test: Analysis produces expected JSON structure
+python new_script.py --analyze-only --course-id=123
+```
+- [ ] Findings categorized correctly (safe_actions vs manual_review)
+- [ ] Risk assessment logic implemented
+- [ ] Edge cases handled gracefully
+
+#### Component 3: LTI Backend Integration
+```javascript
+// Test: New task appears in QA_TASKS
+console.log(QA_TASKS['new-task-id'])
+```
+- [ ] Task definition added without modifying existing
+- [ ] analyzeTask() function extended with new case
+- [ ] executeApprovedActions() function extended
+
+#### Component 4: Frontend Integration
+```javascript
+// Test: Preview modal displays correctly
+showAnalysisPreview('new-task-id')
+```
+- [ ] Preview function follows established patterns
+- [ ] Results display maintains visual consistency
+- [ ] Progress indicators work properly
+
+### TDC Phase 3: CHECK (Validation & Testing)
+**Before deployment, verify:**
+
+#### Regression Testing
+- [ ] Existing duplicate page cleaner task still works
+- [ ] Can switch between tasks without issues
+- [ ] No JavaScript console errors
+- [ ] No Python import conflicts
+
+#### Integration Testing
+- [ ] Canvas API calls work for new task
+- [ ] Phase 2 workflow (analyze → approve → execute) functions
+- [ ] Error handling displays helpful messages
+- [ ] Audit trail generation works
+
+#### User Experience Testing
+- [ ] New task feels identical to duplicate cleaner UX
+- [ ] Confidence-building messaging present
+- [ ] Safety assurances clear and prominent
+- [ ] Manual override controls accessible
+
+---
+
+## 📝 IMPLEMENTATION STEPS (TDC-ENHANCED SEQUENCE)
+
+### Step 1: THINK - Reference Analysis
+- **REQUIRED**: Analyze `qa-automation-lti.js` and `duplicate_page_cleaner.py` thoroughly
+- **REQUIRED**: Understand the Phase 2 "preview-first" workflow pattern
+- **REQUIRED**: Map how the existing script integrates with the LTI interface
+- **TDC**: Plan component-by-component development with testable milestones
+
+### Step 2: DEVELOP - Python Script Enhancement
+1. Add Phase 2 argument parsing (TEST: `--help` works)
+2. Implement enhanced JSON output format (TEST: JSON validates)
+3. Add risk assessment logic (TEST: Categorization correct)
+4. Support approved actions execution mode (TEST: Execution works)
+
+### Step 3: DEVELOP - LTI Backend Integration (ADDITIVE ONLY)
+1. Add task definition to `QA_TASKS` (TEST: Task appears)
+2. Extend `analyzeTask()` function with new case (TEST: Routes to correct script)
+3. Extend `executeApprovedActions()` function (TEST: Execution triggered)
+4. Add script-specific error handling (TEST: Errors display properly)
+
+### Step 4: DEVELOP - Frontend Integration
+1. Create task-specific preview function (TEST: Modal displays)
+2. Create task-specific results function (TEST: Results render)
+3. Add progress messages for the new task (TEST: Progress updates)
+4. Test all user interaction flows (TEST: Complete workflow)
+
+### Step 5: CHECK - Comprehensive Validation
+1. **TDC Regression Testing**: Verify existing functionality unchanged
+2. **TDC Integration Testing**: Verify new functionality works end-to-end
+3. **TDC User Testing**: Verify UX consistency and confidence-building
+4. **TDC Performance Testing**: Verify Canvas API integration and timeouts
+
+---
+
+## 🚨 CRITICAL INTEGRATION ISSUES & SOLUTIONS
+
+**⚠️ Safety First**: [LTI QA Integration Safety Rules.mdc](./LTI%20QA%20Integration%20Safety%20Rules.mdc) contains critical safety patterns based on real integration issues encountered during development.
+
+### Course ID Extraction Issue
+**Problem:** Canvas LTI provides hash course IDs but Canvas API expects numeric IDs.
+
+**Solution:** Extract numeric course ID from endpoint URLs:
+```javascript
+// Extract from lineitems URL
+const lineitemsUrl = token.platformContext?.endpoint?.lineitems;
+if (lineitemsUrl) {
+    const match = lineitemsUrl.match(/\/courses\/(\d+)\//);
+    if (match) {
+        numericCourseId = match[1]; // e.g., "280"
+    }
+}
+```
+
+### JavaScript Scope Issues
+**Problem:** `currentTaskId` variable not accessible between functions.
+
+**Solution:** Move task card initialization inside QAApp scope:
+```javascript
+function initializeTaskCards() {
+    document.querySelectorAll('.task-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const taskId = this.dataset.taskId;
+            if (taskId) {
+                currentTaskId = taskId; // Now accessible!
+                // ... rest of handler
+            }
+        });
+    });
+}
+```
+
+### LTI Token Expiration
+**Problem:** Tokens expire after 10 seconds, causing "TOKEN_TOO_OLD" errors.
+
+**Solution:** Increase token max age:
+```javascript
+{
+    devMode: true,
+    tokenMaxAge: 300, // 5 minutes instead of 10 seconds
+}
+```
+
+### Python Script KeyError Issues
+**Problem:** Missing fields in violation objects during analysis.
+
+**Solution:** Add required fields before processing:
+```python
+# Add assignment_id to each violation for tracking
+for violation in violations:
+    violation['assignment_id'] = assignment['id']
+all_violations.extend(violations)
+```
+
+---
+
+## 📋 MANDATORY INTEGRATION CHECKLIST
+
+### Before Adding New QA Scripts:
+
+1. **Course ID Extraction**
+   - [ ] Verify `getRealCourseId()` extracts numeric course ID from endpoint URLs
+   - [ ] Test with both hash and numeric course IDs
+
+2. **JavaScript Scope Management**
+   - [ ] Place all task card handlers inside QAApp scope
+   - [ ] Ensure `currentTaskId` is properly set and accessible
+
+3. **Token Configuration**
+   - [ ] Set `tokenMaxAge: 300` for 5-minute token validity
+   - [ ] Keep `devMode: true` for development
+
+4. **Python Script Architecture**
+   - [ ] Use two-mode flow: `--analyze-only` and `--execute-from-json`
+   - [ ] Output structured JSON with required fields
+   - [ ] Include proper error handling and logging
+
+### Python Script Requirements:
+```python
+# REQUIRED: Two-mode control flow
+def main():
+    parser.add_argument('--analyze-only', action='store_true')
+    parser.add_argument('--execute-from-json', type=str)
+    
+    if args.analyze_only:
+        results = analyze_course_content()
+        print("ENHANCED_ANALYSIS_JSON:", json.dumps(results))
+    elif args.execute_from_json:
+        results = execute_approved_actions(actions)
+        print("EXECUTION_RESULTS_JSON:", json.dumps(results))
+
+# REQUIRED: Structured output format
+{
+    "summary": {
+        "items_scanned": 0,
+        "issues_found": 0,
+        "safe_actions_found": 0,
+        "manual_review_needed": 0
+    },
+    "findings": {
+        "safe_actions": [],
+        "requires_manual_review": []
+    }
+}
+```
+
+---
+
+## 🔧 HUMAN-CENTERED DESIGN PRINCIPLES
+
+### Philosophy: Reduce Emotional & Cognitive Burden
+Every design decision prioritizes:
+1. **Learning Technologist confidence** in course quality 
+2. **Reduced anxiety** about manual QA processes
+3. **Preserved agency** and control over automation
+4. **Realistic workflow integration** within Canvas constraints
+
+### What We CAN Implement:
+
+#### Rich Transparency & Explainability
+```python
+def provide_rich_context(scan_results):
+    return {
+        "what_scanned": f"47 links across {len(pages)} pages in {course.name}",
+        "scan_method": "HTTP HEAD requests with 30-second timeout",
+        "confidence_explained": {
+            "high": "Server returned definitive 404/500 error",
+            "medium": "Timeout or redirect detected",
+            "low": "Unusual response pattern"
+        },
+        "impact_explanation": {
+            "critical": "Students cannot access required content",
+            "important": "May frustrate or confuse students",
+            "minor": "Cosmetic or optimization opportunity"
+        }
+    }
+```
+
+#### Sophisticated Cognitive Load Reduction
+```html
+<!-- Rich, organized interface within our LTI tool -->
+<div class="qa-results">
+  <div class="priority-critical">
+    <h3>🚨 Critical - Fix Before Students Arrive</h3>
+    <div class="issue-card">
+      <h4>Assignment 2: Video Link Broken</h4>
+      <p><strong>Impact:</strong> 150 students cannot watch required lecture</p>
+      <p><strong>Location:</strong> Week 3 > Assignment Instructions</p>
+      <p><strong>Fix:</strong> Replace with working backup link</p>
+      <button>Auto-fix with backup</button>
+      <button>Manual review</button>
+    </div>
+  </div>
+</div>
+```
+
+#### Emotionally Supportive Interface
+```html
+<div class="scan-complete">
+  <h2>🎉 Great News! Your course is 94% student-ready</h2>
+  <p>You've maintained excellent course quality. Just 3 minor items need attention.</p>
+  
+  <div class="confidence-builder">
+    <p>✅ All critical learning materials are accessible</p>
+    <p>✅ Assignment links are working perfectly</p>
+    <p>✅ Due dates align with your term calendar</p>
+  </div>
+</div>
+```
+
+### What We Must Abandon:
+- **In-Context Fixing** (Canvas API limitation)
+- **Real-Time Integration** (Cannot hook into Canvas editing)
+- **Seamless Undo** (Canvas API doesn't support transactions)
+
+### Realistic Implementation:
+```python
+# Instead of inline fixes, provide precise guidance
+def generate_fix_instructions(broken_link):
+    return {
+        "canvas_edit_url": f"{canvas_url}/courses/{course_id}/pages/{page_id}/edit",
+        "location_instructions": "Find line 15, paragraph 3",
+        "current_text": "https://broken-site.com/resource",
+        "replacement_text": "https://working-site.com/resource",
+        "copy_paste_ready": True
+    }
+```
+
+---
+
+## 🚨 COMMON FAILURE POINTS
+
+1. **Course ID Mismatch:** Using hash instead of numeric course ID
+2. **Scope Issues:** `currentTaskId` not accessible between functions  
+3. **Token Expiration:** Tokens expiring too quickly for user interaction
+4. **Missing Fields:** KeyError when accessing required fields in data structures
+5. **API Errors:** Not handling Canvas API errors properly
+6. **Output Format:** Inconsistent JSON output structure
+
+---
+
+Before writing ANY code, verify:
+- [ ] New task has unique ID (not conflicting with existing)
+- [ ] New Python script has unique filename
+- [ ] Following exact JSON output format from reference
+- [ ] Using only ADDITIVE changes to qa-automation-lti.js
+- [ ] New routes don't conflict with existing endpoints
+- [ ] Error handling matches established patterns
+
+---
+
+## 🚫 IMMEDIATE REJECTION TRIGGERS
+
+**🛡️ Based on Real Failures**: These triggers are derived from actual integration failures documented in [LTI QA Integration Safety Rules.mdc](./LTI%20QA%20Integration%20Safety%20Rules.mdc).
+
+REJECT any request that:
+- Wants to "improve" or "refactor" existing code
+- Suggests modifying duplicate_page_cleaner.py
+- Wants to change existing route handlers
+- Proposes "DRY" refactoring of working code
+- Suggests database or state sharing between tasks
+
+---
+
+## 🎯 SUCCESS CRITERIA
+
+Your implementation is complete when:
+
+### Functional Requirements
+- ✅ Task appears in dashboard with consistent styling
+- ✅ Preview modal explains the process clearly
+- ✅ Analysis phase provides detailed findings
+- ✅ Manual review items allow individual decisions
+- ✅ Safe actions execute successfully
+- ✅ Reports generate with full audit trail
+
+### UX Requirements
+- ✅ **Feels Identical**: New task indistinguishable from duplicate cleaner UX
+- ✅ **Builds Confidence**: Users feel secure proceeding with recommendations
+- ✅ **Reduces Anxiety**: Clear explanations and safety messaging throughout
+- ✅ **Enables Control**: Users can review, modify, or cancel at any step
+
+### Technical Requirements
+- ✅ **Error Resilient**: Handles API failures, timeouts, missing data gracefully
+- ✅ **Performance**: Appropriate timeouts and progress indicators
+- ✅ **Canvas Integration**: Course IDs, user roles, and permissions work correctly
+- ✅ **Audit Compliant**: Full traceability of all actions taken
+
+---
+
+## 📖 REFERENCE EXAMPLES
+
+Study these exact implementations:
+1. **Preview Generation**: `generateDuplicateAnalysisPreview()`
+2. **Results Display**: `generateEnhancedDuplicateResults()`
+3. **Progress Handling**: `showProgress()` and step management
+4. **Error Display**: `showError()` with actionable guidance
+5. **Report Generation**: `downloadReport()` with Excel/JSON options
+
+---
+
+## 🔧 POST-IMPLEMENTATION VALIDATION
+
+After completing any LTI changes, ALWAYS remind the user to run:
+```bash
+./validate-lti-changes.sh
+```
+
+This ensures no existing functionality was broken.
+
+---
+
+## 🎪 FINAL SAFETY CHECK
+
+Before ANY code generation, state clearly:
+"I will now create [X] following the modular isolation pattern. This will NOT modify any existing files and will ADD new functionality only. The existing duplicate page cleaner and all current tasks will remain unchanged."
+
+If you cannot make this statement confidently, STOP and ask for clarification.
+
+---
+
+**Remember: It's better to ask twice than break once. Existing functionality is SACRED. Consistency is key - users should feel like they're using the same tool, just for a different QA task.**
+
+---
+
+## 📚 **COMPLETE DOCUMENTATION ECOSYSTEM**
+
+### **Primary Documents (Read in Order):**
+1. **[LTI Design Principles.md](./LTI%20Design%20Principles.md)** - Human-centered philosophy within Canvas constraints
+2. **[LTI-QA-Architecture.md](./LTI-QA-Architecture.md)** - Technical architecture and modular design patterns  
+3. **[lti-guard-rail.mdc](./lti-guard-rail.mdc)** - Core rules and success methodology (this document)
+4. **[LTI QA Integration Safety Rules.mdc](./LTI%20QA%20Integration%20Safety%20Rules.mdc)** - Safety patterns from real integration issues
+
+### **Implementation Guides:**
+- **[AI Agent Success Checklist for LTI QA Task Integration](./.cursor/rules/AI%20Agent%20Success%20Checklist%20for%20LTI%20QA%20Task%20Integration)** - Step-by-step implementation roadmap
+
+### **Document Purpose Summary:**
+- **Design Principles** → WHY we make design decisions
+- **Architecture** → WHAT the technical structure looks like  
+- **Guard Rail** → HOW to succeed with proven methodology
+- **Safety Rules** → WHAT to avoid based on real failures
+- **Success Checklist** → Step-by-step HOW to implement
+
+**Together, these documents ensure reliable, human-centered LTI QA tool development that consistently delivers one-shot integration success.**
