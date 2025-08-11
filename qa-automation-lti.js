@@ -232,14 +232,24 @@ async function executeApprovedActions(taskId, courseId, userId, approvedActions)
         try {
           const jsonMatch = output.match(/EXECUTION_RESULTS_JSON:\s*(\{[\s\S]*\})/);
           if (jsonMatch && jsonMatch[1]) {
-            resolve(JSON.parse(jsonMatch[1]));
+            const parsedResult = JSON.parse(jsonMatch[1]);
+            console.log('✅ Execution results parsed successfully:', parsedResult);
+            resolve(parsedResult);
           } else {
-             resolve({ summary: { successful: 0, failed: 0}, message: "Execution ran but did not return structured results." });
+            console.log('⚠️ No EXECUTION_RESULTS_JSON found in output. Raw output:', output);
+            resolve({ 
+              summary: { successful: 0, failed: 0}, 
+              message: "Execution ran but did not return structured results.",
+              raw_output: output.substring(0, 500) // Include first 500 chars for debugging
+            });
           }
         } catch (e) {
+          console.error('❌ Failed to parse execution results:', e);
           reject(new Error(`Execution completed, but failed to parse results: ${e.message}`));
         }
       } else {
+        console.error('❌ Execution script failed with code:', code);
+        console.error('Error output:', error);
         reject(new Error(`Execution script failed: ${error || 'Unknown error'}`));
       }
     });
@@ -261,6 +271,24 @@ const QA_TASKS = {
     description: 'Checks assignments for common QA issues like incorrect points, grading types, and confusing dates.',
     category: 'Assignment Quality',
     script: 'assignment_settings_validator.py'
+  },
+  'title-alignment-checker': {
+    name: 'Title Alignment Checker',
+    description: 'Analyzes course modules for consistency between syllabus schedule and module titles, enforcing stylistic rules and validating welcome messages.',
+    category: 'Content Management',
+    script: 'title_alignment_checker.py'
+  },
+  'assessment-date-updater': {
+    name: 'Assessment Date Updater',
+    description: 'Replaces hard-coded dates in assessment reminder wells with week-based deadlines for consistency.',
+    category: 'Content Management',
+    script: 'assessment_date_updater.py'
+  },
+  'table-caption-checker': {
+    name: 'Table Caption Checker',
+    description: 'Checks table captions for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
+    category: 'Media',
+    script: 'table_caption_checker.py'
   }
 }
 
@@ -318,8 +346,18 @@ function generateEnhancedQADashboard(token) {
         .result-section { margin-bottom: 24px; padding: 16px; border-radius: 8px; border-width: 1px; border-style: solid; }
         .result-section h4 { margin-top: 0; display: flex; align-items: center; }
         .action-item { display: flex; align-items: center; padding: 8px; border-radius: 4px; margin-bottom: 8px; background: #f8f9fa; }
+        .action-item.clickable { transition: all 0.2s ease; border: 1px solid transparent; }
+        .action-item.clickable:hover { background: #e9ecef; border-color: var(--acu-deep-purple); transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .action-item input[type=checkbox] { margin-right: 12px; transform: scale(1.2); }
         .action-item label { flex-grow: 1; }
+        .action-content { flex-grow: 1; }
+        .action-icon { margin-left: 12px; font-size: 18px; color: var(--acu-deep-purple); }
+        .manual-steps { background: var(--acu-cream-dark); padding: 16px; border-radius: 6px; margin: 16px 0; }
+        .manual-steps ol { margin: 8px 0; padding-left: 20px; }
+        .manual-steps li { margin-bottom: 8px; }
+        .examples { background: #f8f9fa; padding: 16px; border-radius: 6px; margin: 16px 0; }
+        .example-item { margin-bottom: 8px; }
+        .example-item code { background: #e9ecef; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
         /* NEW: Severity styles for consistent UI */
                  .result-section.severity-high { border-color: var(--acu-red); }
          .result-section.severity-medium { border-color: var(--acu-gold); }
@@ -356,21 +394,7 @@ function generateEnhancedQADashboard(token) {
     </style>
             <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
         <script>
-            // Make QA_TASKS available to client-side JavaScript
-            const QA_TASKS = {
-                'find-duplicate-pages': {
-                    name: 'Find and Remove Duplicate Pages',
-                    description: 'Scans for duplicate pages, prioritizing safety by checking for inbound links before recommending actions.',
-                    category: 'Content Management',
-                    script: 'duplicate_page_cleaner.py'
-                },
-                'validate-assignment-settings': {
-                    name: 'Validate Assignment Settings',
-                    description: 'Checks assignments for common QA issues like incorrect points, grading types, and confusing dates.',
-                    category: 'Assignment Quality',
-                    script: 'assignment_settings_validator.py'
-                }
-            };
+            // QA_TASKS will be defined in the main script below
         </script>
 </head>
 <body>
@@ -423,13 +447,47 @@ function generateEnhancedQADashboard(token) {
         <div class="results-content" id="resultsContent"></div>
     </div>
 
-    <script>
-        window.QAApp = (function() {
-            let currentTaskId = null;
-            let currentAnalysisResult = null;
-            const courseId = '${getRealCourseId(token)}';
-            const userId = '${token.sub || "unknown"}';
-            const userName = '${token.realUserName}';
+            <script>
+            // Make QA_TASKS available in the browser
+            const QA_TASKS = {
+                'find-duplicate-pages': {
+                    name: 'Find and Remove Duplicate Pages',
+                    description: 'Scans for duplicate pages, prioritizing safety by checking for inbound links before recommending actions.',
+                    category: 'Content Management',
+                    script: 'duplicate_page_cleaner.py'
+                },
+                'validate-assignment-settings': {
+                    name: 'Validate Assignment Settings',
+                    description: 'Checks assignments for common QA issues like incorrect points, grading types, and confusing dates.',
+                    category: 'Assignment Quality',
+                    script: 'assignment_settings_validator.py'
+                },
+                'title-alignment-checker': {
+                    name: 'Title Alignment Checker',
+                    description: 'Analyzes course modules for consistency between syllabus schedule and module titles, enforcing stylistic rules and validating welcome messages.',
+                    category: 'Content Management',
+                    script: 'title_alignment_checker.py'
+                },
+                'assessment-date-updater': {
+                    name: 'Assessment Date Updater',
+                    description: 'Replaces hard-coded dates in assessment reminder wells with week-based deadlines for consistency.',
+                    category: 'Content Management',
+                    script: 'assessment_date_updater.py'
+                },
+                'table-caption-checker': {
+                    name: 'Table Caption Checker',
+                    description: 'Checks table captions for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
+                    category: 'Media',
+                    script: 'table_caption_checker.py'
+                }
+            };
+            
+            window.QAApp = (function() {
+                let currentTaskId = null;
+                let currentAnalysisResult = null;
+                const courseId = '${getRealCourseId(token)}';
+                const userId = '${token.sub || "unknown"}';
+                const userName = '${token.realUserName}';
 
 
 
@@ -458,6 +516,10 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateDuplicateResultsHtml(result);
                 } else if (taskId === 'validate-assignment-settings') {
                     contentHtml = generateAssignmentResultsHtml(result);
+                } else if (taskId === 'assessment-date-updater') {
+                    contentHtml = generateAssessmentDateResultsHtml(result);
+                } else if (taskId === 'table-caption-checker') {
+                    contentHtml = generateTableCaptionResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -605,6 +667,128 @@ function generateEnhancedQADashboard(token) {
             }
 
             function generateGenericResultsHtml(result) { /* Fallback, remains the same */ }
+            
+            // --- NEW: Renderer for Assessment Date Updater ---
+            function generateAssessmentDateResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { pages_scanned = 0, dates_found = 0, replacements_proposed = 0 } = result.summary || {};
+
+                let html = \`<p>Analysis scanned \${pages_scanned} summary pages and found \${dates_found} date references that can be updated.</p>\`;
+                
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class="result-section severity-medium">
+                        <h4><input type="checkbox" onchange="QAApp.toggleAll('manualReviewChecks', this.checked)"> 📅 Date Replacements (\${replacements_proposed})</h4>
+                        <p>These pages contain hard-coded dates that can be replaced with week-based deadlines for consistency.</p>
+                        <div>
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class="action-item">
+                                <input type="checkbox" class="manualReviewChecks" data-action-index="\${index}" id="manual_\${index}">
+                                <label for="manual_\${index}">
+                                    <strong>Page:</strong> "\${item.page_title}"<br>
+                                    <strong>Module:</strong> "\${item.module_name || 'Unknown'}"<br>
+                                    <strong>Changes:</strong> \${item.changes ? item.changes.join(', ') : 'Date replacement'}<br>
+                                    <small>\${item.reason}</small>
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+                
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4><input type="checkbox" onchange="QAApp.toggleAll('safeActionChecks', this.checked)" checked> ✅ Safe Actions Staged (\${safe_actions.length})</h4>
+                        <p>These actions can be safely executed.</p>
+                        <div>
+                        \${safe_actions.map((action, index) => \`
+                            <div class="action-item">
+                                <input type="checkbox" class="safeActionChecks" data-action-index="\${index}" id="safe_\${index}" checked>
+                                <label for="safe_\${index}">
+                                    <strong>Action:</strong> \${action.description}<br>
+                                    <small>\${action.reason}</small>
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+                
+                if (requires_manual_review.length === 0 && safe_actions.length === 0) {
+                    html += \`<div class="result-section severity-safe"><h4>🎉 No Date Updates Needed!</h4><p>Excellent! All assessment dates are already using week-based references.</p></div>\`;
+                }
+
+                html += \`
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
+                        <button class="btn-primary" onclick="QAApp.executeSelectedActions()">Execute Selected Updates</button>
+                    </div>\`;
+                return html;
+            }
+            
+            // --- NEW: Renderer for Table Caption Checker ---
+            function generateTableCaptionResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { pages_scanned = 0, tables_found = 0, issues_found = 0, design_standards_loaded = false } = result.summary || {};
+
+                let html = \`<p>Analysis scanned \${pages_scanned} pages and found \${tables_found} tables with class "acuo-table". Found \${issues_found} caption compliance issues.</p>\`;
+                
+                if (!design_standards_loaded) {
+                    html += \`<div class="result-section severity-medium"><h4>⚠️ Design Standards Not Available</h4><p>The ACU Online Design Library could not be accessed. Analysis will use basic standards.</p></div>\`;
+                }
+                
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class="result-section severity-medium">
+                        <h4>📋 Caption Compliance Issues (\${issues_found})</h4>
+                        <p>These tables need caption improvements to meet ACU design standards. Click on any issue to open the page in Canvas for manual editing.</p>
+                        <div>
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class="action-item clickable" onclick="QAApp.openCanvasPage('\${item.page_url}')" style="cursor: pointer;">
+                                <div class="action-content">
+                                    <strong>Page:</strong> "\${item.page_title}"<br>
+                                    <strong>Issue:</strong> \${item.description}<br>
+                                    <strong>Table:</strong> \${item.table_preview || 'Unknown'}<br>
+                                    <strong>Recommendation:</strong> \${item.recommendation}<br>
+                                    <small>\${item.reason}</small>
+                                </div>
+                                <div class="action-icon">🔗</div>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+                
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4>✅ Safe Actions Staged (\${safe_actions.length})</h4>
+                        <p>These actions can be safely executed.</p>
+                        <div>
+                        \${safe_actions.map((action, index) => \`
+                            <div class="action-item">
+                                <div class="action-content">
+                                    <strong>Action:</strong> \${action.description}<br>
+                                    <small>\${action.reason}</small>
+                                </div>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+                
+                if (requires_manual_review.length === 0 && safe_actions.length === 0) {
+                    html += \`<div class="result-section severity-safe"><h4>🎉 All Tables Compliant!</h4><p>Excellent! All tables with class "acuo-table" have proper captions that meet ACU design standards.</p></div>\`;
+                }
+
+                html += \`
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
+                        <button class="btn-primary" onclick="QAApp.showManualGuidance()">📋 Show Manual Fixes Guide</button>
+                    </div>\`;
+                return html;
+            }
             
             // --- CORE LOGIC ---
             
@@ -981,15 +1165,118 @@ function generateEnhancedQADashboard(token) {
                 });
             }
             
+            function openCanvasPage(pageUrl) {
+                if (pageUrl && pageUrl !== 'N/A') {
+                    window.open(pageUrl, '_blank');
+                } else {
+                    alert('Page URL not available for this item.');
+                }
+            }
+            
+            function showManualGuidance() {
+                if (!currentAnalysisResult) {
+                    alert('No analysis results available');
+                    return;
+                }
+                
+                const issues = currentAnalysisResult.findings?.requires_manual_review || [];
+                if (issues.length === 0) {
+                    alert('No manual fixes needed - all items are compliant!');
+                    return;
+                }
+                
+                const container = document.getElementById('resultsContainer');
+                document.getElementById('resultsTitle').textContent = 'Manual Fixes Guide - ' + QA_TASKS[currentTaskId].name;
+                
+                let html = \`
+                    <div class="result-section severity-medium">
+                        <h4>📋 Manual Fixes Required (\${issues.length} items)</h4>
+                        <p>Canvas API limitations prevent automatic table caption updates. Follow these steps to fix each issue manually:</p>
+                        
+                        <div class="manual-steps">
+                            <h5>🔧 Step-by-Step Process:</h5>
+                            <ol>
+                                <li><strong>Open the page</strong> - Click on any issue below to open the page in Canvas</li>
+                                <li><strong>Switch to HTML editor</strong> - Click the HTML editor button in Canvas</li>
+                                <li><strong>Locate the table</strong> - Find the table with class "acuo-table"</li>
+                                <li><strong>Add/modify caption</strong> - Add or update the &lt;caption&gt; element</li>
+                                <li><strong>Apply styling</strong> - Add CSS classes: "sm-font", "text-muted"</li>
+                                <li><strong>Include citation</strong> - Add proper citation: "(Source, Year)"</li>
+                                <li><strong>Save and publish</strong> - Save changes and publish the page</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="examples">
+                            <h5>💡 Examples:</h5>
+                            <div class="example-item">
+                                <strong>✅ Good:</strong> <code>&lt;caption class="sm-font text-muted"&gt;Table 1: Student Performance Data (ACU Online, 2024)&lt;/caption&gt;</code>
+                            </div>
+                            <div class="example-item">
+                                <strong>❌ Bad:</strong> <code>&lt;caption&gt;Table 1&lt;/caption&gt;</code>
+                            </div>
+                            <div class="example-item">
+                                <strong>❌ Missing:</strong> No caption element found
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="result-section severity-medium">
+                        <h4>📋 Issues to Fix (\${issues.length})</h4>
+                        <p>Click on any issue to open the page in Canvas for editing:</p>
+                        <div>\`;
+                
+                issues.forEach((item, index) => {
+                    html += \`
+                        <div class="action-item clickable" onclick="QAApp.openCanvasPage('\${item.page_url}')" style="cursor: pointer;">
+                            <div class="action-content">
+                                <strong>Page:</strong> "\${item.page_title}"<br>
+                                <strong>Issue:</strong> \${item.description}<br>
+                                <strong>Current:</strong> \${item.current_value}<br>
+                                <strong>Suggested:</strong> \${item.suggested_value}<br>
+                                <small>\${item.recommendation}</small>
+                            </div>
+                            <div class="action-icon">🔗</div>
+                        </div>
+                    \`;
+                });
+                
+                html += \`
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
+                        <button class="btn-primary" onclick="QAApp.returnToResults()">← Back to Results</button>
+                    </div>
+                \`;
+                
+                document.getElementById('resultsContent').innerHTML = html;
+                container.style.display = 'block';
+                container.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            function returnToResults() {
+                if (currentAnalysisResult) {
+                    showResults(currentTaskId, currentAnalysisResult);
+                }
+            }
+            
             function initializeTaskCards() {
+                console.log('🔧 Initializing task cards...');
+                console.log('🔧 QA_TASKS available:', typeof QA_TASKS);
+                console.log('🔧 QA_TASKS keys:', Object.keys(QA_TASKS));
                 document.querySelectorAll('.task-card').forEach(card => {
                     card.addEventListener('click', function() {
                         const taskId = this.dataset.taskId;
                         console.log('🎯 Task card clicked:', taskId);
+                        console.log('🔍 Available tasks:', Object.keys(QA_TASKS));
+                        console.log('🔍 QA_TASKS object:', QA_TASKS);
+                        console.log('🔍 QA_TASKS[taskId]:', QA_TASKS[taskId]);
                         if (taskId) {
                             currentTaskId = taskId; // Now accessible!
                             console.log('✅ currentTaskId set to:', currentTaskId);
-                            document.getElementById('previewTitle').textContent = QA_TASKS[taskId].name;
+                            if (QA_TASKS[taskId]) {
+                                document.getElementById('previewTitle').textContent = QA_TASKS[taskId].name;
                             document.getElementById('previewContent').innerHTML = 
                                 '<p>' + QA_TASKS[taskId].description + '</p>' +
                                 '<div style="margin: 20px 0; padding: 16px; background: var(--acu-cream-dark); border-radius: 6px; border-left: 4px solid var(--acu-gold);">' +
@@ -1000,14 +1287,38 @@ function generateEnhancedQADashboard(token) {
                                     '<li>Check for protective inbound links</li>' +
                                     '<li>Categorize findings by safety level</li>' +
                                     '<li>Provide detailed comparison for each duplicate</li>' :
+                                    taskId === 'validate-assignment-settings' ?
                                     '<li>Analyze all assignment configurations</li>' +
                                     '<li>Check points, grading types, and due dates</li>' +
                                     '<li>Identify potential student confusion points</li>' +
-                                    '<li>Recommend improvements for clarity</li>') +
+                                    '<li>Recommend improvements for clarity</li>' :
+                                    taskId === 'title-alignment-checker' ?
+                                    '<li>Analyze syllabus schedule and module titles</li>' +
+                                    '<li>Check for consistency and style compliance</li>' +
+                                    '<li>Validate welcome message alignment</li>' +
+                                    '<li>Identify title mismatches and style violations</li>' :
+                                    taskId === 'assessment-date-updater' ?
+                                    '<li>Scan assessment reminder wells for hard-coded dates</li>' +
+                                    '<li>Parse syllabus for week-date mapping</li>' +
+                                    '<li>Replace dates with week-based deadlines</li>' +
+                                    '<li>Ensure consistency across all assessment reminders</li>' :
+                                    taskId === 'table-caption-checker' ?
+                                    '<li>Access ACU Online Design Library for standards</li>' +
+                                    '<li>Analyze tables with class "acuo-table"</li>' +
+                                    '<li>Check caption presence and styling compliance</li>' +
+                                    '<li>Provide recommendations for accessibility</li>' :
+                                    '<li>Perform comprehensive analysis</li>' +
+                                    '<li>Check for potential issues</li>' +
+                                    '<li>Identify areas for improvement</li>' +
+                                    '<li>Provide detailed recommendations</li>') +
                                 '</ul>' +
                                 '</div>' +
                                 '<p><em>This analysis prioritizes safety and will never make changes without your explicit approval.</em></p>';
                             document.getElementById('analysisPreview').classList.add('active');
+                            } else {
+                                console.error('❌ Task not found in QA_TASKS:', taskId);
+                                alert('Task not found: ' + taskId);
+                            }
                         }
                     });
                     
@@ -1190,10 +1501,10 @@ async function getRealUserName(token) {
 const setup = async () => {
   try {
     // Deploy the LTI provider first
-    await lti.deploy({ port: process.env.PORT || 3000 })
-    console.log('🚀 QA Automation LTI Server running on port', process.env.PORT || 3000)
-    console.log('🔗 Tunnel URL: https://hon-episodes-municipality-wide.trycloudflare.com')
-    console.log('📝 Update Canvas Developer Key with: https://hon-episodes-municipality-wide.trycloudflare.com')
+    await lti.deploy({ port: process.env.PORT || 8080 })
+    console.log('🚀 QA Automation LTI Server running on port', process.env.PORT || 8080)
+    console.log('🔗 Tunnel URL: https://pgp-blond-blink-pics.trycloudflare.com')
+    console.log('📝 Update Canvas Developer Key with: https://pgp-blond-blink-pics.trycloudflare.com')
     
     // Then register the platform
     await lti.registerPlatform({
