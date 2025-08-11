@@ -289,6 +289,12 @@ const QA_TASKS = {
     description: 'Checks table captions for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
     category: 'Media',
     script: 'table_caption_checker.py'
+  },
+  'remove-empty-groups-modules': {
+    name: 'Remove Empty Groups & Modules',
+    description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
+    category: 'Cleanup',
+    script: 'empty_groups_modules_cleaner.py'
   }
 }
 
@@ -479,6 +485,12 @@ function generateEnhancedQADashboard(token) {
                     description: 'Checks table captions for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
                     category: 'Media',
                     script: 'table_caption_checker.py'
+                },
+                'remove-empty-groups-modules': {
+                    name: 'Remove Empty Groups & Modules',
+                    description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
+                    category: 'Cleanup',
+                    script: 'empty_groups_modules_cleaner.py'
                 }
             };
             
@@ -520,6 +532,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateAssessmentDateResultsHtml(result);
                 } else if (taskId === 'table-caption-checker') {
                     contentHtml = generateTableCaptionResultsHtml(result);
+                } else if (taskId === 'remove-empty-groups-modules') {
+                    contentHtml = generateEmptyGroupsModulesResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -667,6 +681,63 @@ function generateEnhancedQADashboard(token) {
             }
 
             function generateGenericResultsHtml(result) { /* Fallback, remains the same */ }
+
+            function generateEmptyGroupsModulesResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { groups_scanned = 0, modules_scanned = 0, safe_actions_found = 0, manual_review_needed = 0, weighted_course = false } = result.summary || {};
+
+                let html = \`<p>Scanned \${groups_scanned} assignment groups and \${modules_scanned} modules.\${weighted_course ? ' Weighted grading is enabled in this course.' : ''}</p>\`;
+
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class="result-section severity-medium">
+                        <h4><input type="checkbox" onchange="QAApp.toggleAll('manualReviewChecks', this.checked)"> 👥 Manual Review Required (\${requires_manual_review.length})</h4>
+                        <p>These items are published, referenced by prerequisites, or have grading weight. Review carefully.</p>
+                        <div>
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class="action-item">
+                                <input type="checkbox" class="manualReviewChecks" data-action-index="\${index}" id="manual_\${index}">
+                                <label for="manual_\${index}">
+                                    <div class="action-title">\${item.type === 'delete_assignment_group' ? 'Assignment Group' : 'Module'}: \${item.group_name || item.module_name}</div>
+                                    <div class="action-desc">\${item.reason}</div>
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4><input type="checkbox" onchange="QAApp.toggleAll('safeActionChecks', this.checked)" checked> ✅ Safe Deletions Staged (\${safe_actions_found || safe_actions.length})</h4>
+                        <p>These items are empty and safe to remove.</p>
+                        <div>
+                        \${safe_actions.map((action, index) => \`
+                            <div class="action-item">
+                                <input type="checkbox" class="safeActionChecks" data-action-index="\${index}" id="safe_\${index}" checked>
+                                <label for="safe_\${index}">
+                                    <div class="action-title">\${action.type === 'delete_assignment_group' ? 'Assignment Group' : 'Module'}: \${action.group_name || action.module_name}</div>
+                                    <div class="action-desc">\${action.reason}</div>
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length === 0 && requires_manual_review.length === 0) {
+                    html += \`<div class="result-section severity-safe"><h4>🎉 Nothing to Clean!</h4><p>No empty assignment groups or modules were found.</p></div>\`;
+                }
+
+                html += \`
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
+                        <button class="btn-primary" onclick="QAApp.executeSelectedActions()">Delete Selected Items</button>
+                    </div>\`;
+
+                return html;
+            }
             
             // --- NEW: Renderer for Assessment Date Updater ---
             function generateAssessmentDateResultsHtml(result) {
