@@ -319,6 +319,12 @@ const QA_TASKS = {
     description: 'Checks figcaptions for images and videos for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
     category: 'Media',
     script: 'figcaption_compliance_checker.py'
+  },
+  'transcript-button-compliance-checker': {
+    name: 'Transcript Button Compliance Checker',
+    description: 'Analyzes transcript buttons for images within figure tags for compliance with ACU Online Design Library standards, validating links and attributes.',
+    category: 'Media',
+    script: 'transcript_button_compliance_checker.py'
   }
 }
 
@@ -539,6 +545,12 @@ function generateEnhancedQADashboard(token) {
                     description: 'Checks figcaptions for images and videos for compliance with ACU Online Design Library standards, ensuring proper styling and accessibility.',
                     category: 'Media',
                     script: 'figcaption_compliance_checker.py'
+                },
+                'transcript-button-compliance-checker': {
+                    name: 'Transcript Button Compliance Checker',
+                    description: 'Analyzes transcript buttons for images within figure tags for compliance with ACU Online Design Library standards, validating links and attributes.',
+                    category: 'Media',
+                    script: 'transcript_button_compliance_checker.py'
                 }
             };
             
@@ -590,6 +602,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateFigcaptionComplianceResultsHtml(result);
                 } else if (taskId === 'alt-text-compliance-checker') {
                     contentHtml = generateAltTextComplianceResultsHtml(result);
+                } else if (taskId === 'transcript-button-compliance-checker') {
+                    contentHtml = generateTranscriptButtonComplianceResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -1251,6 +1265,161 @@ function generateEnhancedQADashboard(token) {
                 return html;
             }
 
+            // --- NEW: Renderer for Transcript Button Compliance Checker ---
+            function generateTranscriptButtonComplianceResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { 
+                    total_images_with_transcript_buttons = 0, 
+                    valid_transcript_buttons = 0, 
+                    buttons_with_valid_links_poor_attributes = 0,
+                    buttons_with_invalid_links = 0,
+                    compliance_rate_percent = 0 
+                } = result.summary || {};
+                const { design_standards_summary = {} } = result;
+
+                let html = \`
+                    <div class="execution-summary">
+                        <div class="execution-stats">
+                            <div class="stat-card success">
+                                📊 \${total_images_with_transcript_buttons} Images with Transcript Buttons
+                            </div>
+                            <div class="stat-card \${compliance_rate_percent >= 80 ? 'success' : 'mixed'}">
+                                🎯 \${compliance_rate_percent}% Compliance Rate
+                            </div>
+                        </div>
+                        <div class="timestamp">
+                            Analysis completed: \${new Date().toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div class="result-section severity-\${valid_transcript_buttons > 0 ? 'safe' : 'medium'}">
+                        <h4>
+                            ✅ Compliant Transcript Buttons 
+                            <span class="severity-badge \${valid_transcript_buttons > 0 ? 'low' : 'medium'}">\${valid_transcript_buttons} valid</span>
+                        </h4>
+                        \${valid_transcript_buttons > 0 ? 
+                            \`<p>Great! \${valid_transcript_buttons} transcript buttons are fully compliant with ACU standards.</p>\` :
+                            \`<p>No fully compliant transcript buttons found. Review the items below for improvement opportunities.</p>\`
+                        }
+                        \${design_standards_summary.recommended_attributes ? \`
+                        <div class="examples">
+                            <h5>ACU Standard Requirements:</h5>
+                            <ul>
+                                <li><strong>Classes:</strong> \${design_standards_summary.recommended_attributes.recommended_classes?.join(' ') || 'acuo-btn external'}</li>
+                                <li><strong>Role:</strong> \${design_standards_summary.recommended_attributes.recommended_role || 'button'}</li>
+                                <li><strong>Title:</strong> \${design_standards_summary.recommended_attributes.recommended_title || 'Transcript'}</li>
+                                <li><strong>Link:</strong> Must point to transcript page containing page number or figcaption text</li>
+                            </ul>
+                        </div>
+                        \` : ''}
+                    </div>\`;
+
+                if (requires_manual_review.length > 0) {
+                    const highPriorityItems = requires_manual_review.filter(item => item.priority === 'high');
+                    const mediumPriorityItems = requires_manual_review.filter(item => item.priority === 'medium');
+                    
+                    if (highPriorityItems.length > 0) {
+                        html += \`
+                        <div class="result-section severity-high">
+                            <h4>🚨 High Priority - Invalid Links <span class="severity-badge high">\${highPriorityItems.length} items</span></h4>
+                            <p>These transcript buttons have broken or invalid links that need immediate attention:</p>
+                            \${highPriorityItems.map(item => \`
+                                <div class="action-item">
+                                    <div class="action-content">
+                                        <strong>\${item.page_title}</strong><br>
+                                        <small style="color: var(--neutral-grey);">Issue: \${item.issue_type}</small><br>
+                                        <code style="background: #f8d7da; color: #721c24; padding: 2px 4px; border-radius: 3px; font-size: 0.85em;">
+                                            \${item.current_button_html.length > 100 ? item.current_button_html.substring(0, 100) + '...' : item.current_button_html}
+                                        </code>
+                                        <div class="manual-steps">
+                                            <strong>Recommendations:</strong>
+                                            <ul>
+                                                \${item.recommendations.map(rec => \`<li>\${rec}</li>\`).join('')}
+                                            </ul>
+                                            <p><strong>Canvas Edit:</strong> <a href="\${item.page_url}/edit" target="_blank" style="color: var(--acu-red);">Edit this page in Canvas →</a></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            \`).join('')}
+                        </div>\`;
+                    }
+                    
+                    if (mediumPriorityItems.length > 0) {
+                        html += \`
+                        <div class="result-section severity-medium">
+                            <h4>⚠️ Medium Priority - Attribute Improvements <span class="severity-badge medium">\${mediumPriorityItems.length} items</span></h4>
+                            <p>These transcript buttons have valid links but need attribute improvements for ACU standards:</p>
+                            \${mediumPriorityItems.map(item => \`
+                                <div class="action-item">
+                                    <div class="action-content">
+                                        <strong>\${item.page_title}</strong><br>
+                                        <small style="color: var(--neutral-grey);">Issue: \${item.issue_type}</small><br>
+                                        <code style="background: #fff3cd; color: #856404; padding: 2px 4px; border-radius: 3px; font-size: 0.85em;">
+                                            \${item.current_button_html.length > 100 ? item.current_button_html.substring(0, 100) + '...' : item.current_button_html}
+                                        </code>
+                                        <div class="manual-steps">
+                                            <strong>Recommendations:</strong>
+                                            <ul>
+                                                \${item.recommendations.map(rec => \`<li>\${rec}</li>\`).join('')}
+                                            </ul>
+                                            <p><strong>Canvas Edit:</strong> <a href="\${item.page_url}/edit" target="_blank" style="color: var(--acu-gold);">Edit this page in Canvas →</a></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            \`).join('')}
+                        </div>\`;
+                    }
+                }
+                
+                // Add no issues found message if all are compliant
+                if (requires_manual_review.length === 0 && total_images_with_transcript_buttons > 0) {
+                    html += \`
+                    <div class="success-message">
+                        <h4>🎉 Excellent Compliance!</h4>
+                        <p>All transcript buttons in this course meet ACU Online Design Library standards. No action required.</p>
+                    </div>\`;
+                }
+                
+                // Add information message if no transcript buttons found
+                if (total_images_with_transcript_buttons === 0) {
+                    html += \`
+                    <div class="result-section severity-low">
+                        <h4>ℹ️ No Transcript Buttons Found</h4>
+                        <p>This analysis only examines images within &lt;figure&gt; tags that have transcript buttons. No such content was found in this course.</p>
+                        <div style="margin-top: 16px; padding: 12px; background: var(--acu-cream-dark); border-radius: 6px;">
+                            <strong>Note:</strong> If you have transcript buttons that should be included:
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li>Ensure images are within &lt;figure&gt; tags</li>
+                                <li>Transcript links should contain "transcript" in text, title, or href</li>
+                                <li>Links should point to Canvas pages in the same course</li>
+                            </ul>
+                        </div>
+                    </div>\`;
+                }
+                
+                // Download report functionality
+                html += \`
+                    <div class="next-steps">
+                        <h4>📋 Next Steps</h4>
+                        <div class="action-buttons">
+                            <button class="btn-secondary" onclick="QAApp.downloadReport('transcript-button-compliance', currentAnalysisResult)">
+                                📄 Download Report
+                            </button>
+                            <button class="btn-primary" onclick="QAApp.startNewAnalysis()">
+                                🔄 Analyze Another Task
+                            </button>
+                        </div>
+                        \${requires_manual_review.length > 0 ? \`
+                        <p><strong>Recommendation:</strong> Review the items above and update transcript buttons in Canvas to meet ACU standards. All changes must be made manually in Canvas.</p>
+                        \` : \`
+                        <p><strong>Status:</strong> This course meets ACU Online Design Library standards for transcript buttons. Consider this QA check complete.</p>
+                        \`}
+                    </div>
+                \`;
+
+                return html;
+            }
+
             // --- NEW: Renderer for Rubric Cleanup ---
             function generateRubricCleanupResultsHtml(result) {
                 const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
@@ -1849,6 +2018,12 @@ function generateEnhancedQADashboard(token) {
                                     '<li>Check alt text presence and quality compliance</li>' +
                                     '<li>Distinguish decorative vs informative images</li>' +
                                     '<li>Provide actionable accessibility recommendations</li>' :
+                                    taskId === 'transcript-button-compliance-checker' ?
+                                    '<li>Access ACU Online Design Library for transcript button standards</li>' +
+                                    '<li>Analyze images with transcript buttons within figure tags</li>' +
+                                    '<li>Validate transcript link destinations and page content</li>' +
+                                    '<li>Check button attributes compliance (classes, role, title)</li>' +
+                                    '<li>Provide detailed recommendations with manual edit guidance</li>' :
                                     '<li>Perform comprehensive analysis</li>' +
                                     '<li>Check for potential issues</li>' +
                                     '<li>Identify areas for improvement</li>' +
