@@ -301,6 +301,12 @@ const QA_TASKS = {
     description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
     category: 'Assessment',
     script: 'rubric_cleanup_analyzer.py'
+  },
+  'syllabus-acuo-attribution-remover': {
+    name: 'Remove Syllabus ACUO Attribution',
+    description: 'Finds and safely removes "(ACU Online, YYYY)" attributions from the course syllabus with preview and approval.',
+    category: 'Syllabus',
+    script: 'syllabus_acuo_attribution_remover.py'
   }
 }
 
@@ -503,6 +509,12 @@ function generateEnhancedQADashboard(token) {
                     description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
                     category: 'Assessment',
                     script: 'rubric_cleanup_analyzer.py'
+                },
+                'syllabus-acuo-attribution-remover': {
+                    name: 'Remove Syllabus ACUO Attribution',
+                    description: 'Finds and safely removes "(ACU Online, YYYY)" attributions from the course syllabus with preview and approval.',
+                    category: 'Syllabus',
+                    script: 'syllabus_acuo_attribution_remover.py'
                 }
             };
             
@@ -548,6 +560,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateEmptyGroupsModulesResultsHtml(result);
                 } else if (taskId === 'rubric-cleanup') {
                     contentHtml = generateRubricCleanupResultsHtml(result);
+                } else if (taskId === 'syllabus-acuo-attribution-remover') {
+                    contentHtml = generateSyllabusAttributionResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -872,6 +886,64 @@ function generateEnhancedQADashboard(token) {
                         <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
                         <button class="btn-primary" onclick="QAApp.showManualGuidance()">📋 Show Manual Fixes Guide</button>
                     </div>\`;
+                return html;
+            }
+
+            // --- NEW: Renderer for Syllabus ACUO Attribution Remover ---
+            function generateSyllabusAttributionResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { items_scanned = 0, issues_found = 0, safe_actions_found = 0, manual_review_needed = 0 } = result.summary || {};
+
+                let html = \`<p>Analyzed \${items_scanned} syllabus. Found \${issues_found} occurrence(s) of \"(ACU Online, YYYY)\".</p>\`;
+
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class=\"result-section severity-medium\">
+                        <h4><input type=\"checkbox\" onchange=\"QAApp.toggleAll('manualReviewChecks', this.checked)\"> 👥 Manual Review Required (\${manual_review_needed})</h4>
+                        <p>These occurrences appear in sensitive contexts (e.g., headings, quotes, references) and should be reviewed manually.</p>
+                        <div>
+                        \${requires_manual_review.map((item, index) => \`
+                            <div class=\"action-item\">
+                                <input type=\"checkbox\" class=\"manualReviewChecks\" data-action-index=\"\${index}\" id=\"manual_\${index}\">\n
+                                <label for=\"manual_\${index}\">\n
+                                    <div class=\"action-desc\"><strong>Excerpt:</strong> \${item.excerpt || 'N/A'}</div>\n
+                                    <div class=\"action-desc\"><small>\${item.reason || 'Manual review recommended'} </small></div>\n
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class=\"result-section severity-safe\">\n
+                        <h4><input type=\"checkbox\" onchange=\"QAApp.toggleAll('safeActionChecks', this.checked)\" checked> ✅ Safe Removals Staged (\${safe_actions_found || safe_actions.length})</h4>
+                        <p>Occurrences in plain paragraph contexts can be removed safely.</p>
+                        <div>
+                        \${safe_actions.map((action, index) => \`
+                            <div class=\"action-item\">
+                                <input type=\"checkbox\" class=\"safeActionChecks\" data-action-index=\"\${index}\" id=\"safe_\${index}\" checked>
+                                <label for=\"safe_\${index}\">\n
+                                    <div class=\"action-title\">Remove Syllabus Attribution</div>\n
+                                    <div class=\"action-desc\"><small>\${action.reason || 'Safe to remove'} </small></div>\n
+                                </label>
+                            </div>
+                        \`).join('')}
+                        </div>
+                    </div>\`;
+                }
+
+                if ((safe_actions.length === 0) && (requires_manual_review.length === 0)) {
+                    html += \`<div class=\"result-section severity-safe\"><h4>🎉 No Attributions Found!</h4><p>The syllabus does not contain the target ACU Online attribution.</p></div>\`;
+                }
+
+                html += \`
+                    <div style=\"margin-top: 24px; text-align: right;\">\n
+                        <button class=\"btn-secondary\" onclick=\"QAApp.downloadReport()\">📄 Download Report</button>\n
+                        <button class=\"btn-primary\" onclick=\"QAApp.executeSelectedActions()\">Execute Selected Actions</button>\n
+                    </div>\`;
+
                 return html;
             }
 
@@ -1457,6 +1529,11 @@ function generateEnhancedQADashboard(token) {
                                     '<li>Analyze tables with class "acuo-table"</li>' +
                                     '<li>Check caption presence and styling compliance</li>' +
                                     '<li>Provide recommendations for accessibility</li>' :
+                                    taskId === 'syllabus-acuo-attribution-remover' ?
+                                    '<li>Analyze the course syllabus for "(ACU Online, YYYY)"</li>' +
+                                    '<li>Classify occurrences into safe removals vs manual review</li>' +
+                                    '<li>Provide risk assessment and excerpts for confidence</li>' +
+                                    '<li>Execute only approved removals with hash-safety</li>' :
                                     '<li>Perform comprehensive analysis</li>' +
                                     '<li>Check for potential issues</li>' +
                                     '<li>Identify areas for improvement</li>' +
