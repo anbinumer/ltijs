@@ -269,7 +269,7 @@ const QA_TASKS = {
   'validate-assignment-settings': {
     name: 'Validate Assignment Settings',
     description: 'Checks assignments for common QA issues like incorrect points, grading types, and confusing dates.',
-    category: 'Assignment Quality',
+    category: 'Assessment',
     script: 'assignment_settings_validator.py'
   },
   'title-alignment-checker': {
@@ -299,7 +299,7 @@ const QA_TASKS = {
   'rubric-cleanup': {
     name: 'Rubric Cleanup',
     description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
-    category: 'Rubric Cleanup',
+    category: 'Assessment',
     script: 'rubric_cleanup_analyzer.py'
   }
 }
@@ -471,7 +471,7 @@ function generateEnhancedQADashboard(token) {
                 'validate-assignment-settings': {
                     name: 'Validate Assignment Settings',
                     description: 'Checks assignments for common QA issues like incorrect points, grading types, and confusing dates.',
-                    category: 'Assignment Quality',
+                    category: 'Assessment',
                     script: 'assignment_settings_validator.py'
                 },
                 'title-alignment-checker': {
@@ -501,7 +501,7 @@ function generateEnhancedQADashboard(token) {
                 'rubric-cleanup': {
                     name: 'Rubric Cleanup',
                     description: 'Identifies unnecessary or unused rubrics and stages safe deletions for approval.',
-                    category: 'Rubric Cleanup',
+                    category: 'Assessment',
                     script: 'rubric_cleanup_analyzer.py'
                 }
             };
