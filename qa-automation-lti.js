@@ -290,6 +290,12 @@ const QA_TASKS = {
     category: 'Media',
     script: 'table_caption_checker.py'
   },
+  'alt-text-compliance-checker': {
+    name: 'Alt Text Compliance Checker',
+    description: 'Audits images within figure tags for alt text compliance with accessibility standards, referencing ACU Online Design Library.',
+    category: 'Media',
+    script: 'alt_text_compliance_checker.py'
+  },
   'remove-empty-groups-modules': {
     name: 'Remove Empty Groups & Modules',
     description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
@@ -504,6 +510,12 @@ function generateEnhancedQADashboard(token) {
                     category: 'Media',
                     script: 'table_caption_checker.py'
                 },
+                'alt-text-compliance-checker': {
+                    name: 'Alt Text Compliance Checker',
+                    description: 'Audits images within figure tags for alt text compliance with accessibility standards, referencing ACU Online Design Library.',
+                    category: 'Media',
+                    script: 'alt_text_compliance_checker.py'
+                },
                 'remove-empty-groups-modules': {
                     name: 'Remove Empty Groups & Modules',
                     description: 'Identifies empty assignment groups and modules; preview safe deletions and execute only approved items.',
@@ -576,6 +588,8 @@ function generateEnhancedQADashboard(token) {
                     contentHtml = generateSyllabusAttributionResultsHtml(result);
                 } else if (taskId === 'figcaption-compliance-checker') {
                     contentHtml = generateFigcaptionComplianceResultsHtml(result);
+                } else if (taskId === 'alt-text-compliance-checker') {
+                    contentHtml = generateAltTextComplianceResultsHtml(result);
                 } else {
                     contentHtml = generateGenericResultsHtml(result); // Fallback
                 }
@@ -1064,6 +1078,166 @@ function generateEnhancedQADashboard(token) {
                                 <li>Descriptive caption text provided</li>
                                 <li>Appropriate citation format used</li>
                                 <li>Accessibility standards met</li>
+                            </ul>
+                        </div>
+                    </div>\`;
+                }
+
+                html += \`
+                    <div style="margin-top: 24px; text-align: right;">
+                        <button class="btn-secondary" onclick="QAApp.downloadReport()">📄 Download Report</button>
+                    </div>\`;
+
+                return html;
+            }
+
+            // --- NEW: Renderer for Alt Text Compliance Checker ---
+            function generateAltTextComplianceResultsHtml(result) {
+                const { safe_actions = [], requires_manual_review = [] } = result.findings || {};
+                const { total_images_analyzed = 0, compliance_rate = 0, issues_found = 0 } = result.summary || {};
+                const { design_standards = {} } = result;
+
+                let html = \`
+                    <div style="background: linear-gradient(135deg, var(--acu-cream) 0%, var(--acu-cream-light) 100%); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--acu-deep-purple);">
+                        <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                            <span style="font-size: 20px; margin-right: 12px;">♿</span>
+                            <h3 style="margin: 0; color: var(--acu-deep-purple); font-size: 18px;">Alt Text Compliance Analysis Complete</h3>
+                        </div>
+                        <p style="margin: 0; color: var(--acu-purple); font-size: 14px; line-height: 1.5;">
+                            Analyzed <strong>\${total_images_analyzed} images within figure tags</strong> for accessibility compliance. 
+                            Current compliance rate: <strong>\${compliance_rate}%</strong>
+                            \${design_standards.standards_source ? ' (Based on ' + design_standards.standards_source + ')' : ''}
+                        </p>
+                    </div>\`;
+
+                // Compliance summary
+                if (total_images_analyzed > 0) {
+                    const good_quality = result.summary?.good_quality_count || 0;
+                    const compliance_color = compliance_rate >= 80 ? 'var(--acu-success)' : compliance_rate >= 60 ? 'var(--acu-warning)' : 'var(--acu-error)';
+                    
+                    html += \`
+                    <div class="result-section severity-low">
+                        <h4>📊 Accessibility Compliance Summary</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0;">
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-deep-purple);">\${total_images_analyzed}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Images Analyzed</div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: \${compliance_color};">\${compliance_rate}%</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Compliance Rate</div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-success);">\${good_quality}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Good Quality</div>
+                            </div>
+                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: var(--acu-red);">\${issues_found}</div>
+                                <div style="font-size: 12px; color: var(--acu-purple);">Issues Found</div>
+                            </div>
+                        </div>
+                    </div>\`;
+                }
+                
+                if (requires_manual_review.length > 0) {
+                    html += \`
+                    <div class="result-section severity-medium">
+                        <h4>📋 Alt Text Issues Requiring Manual Fixes (\${requires_manual_review.length})</h4>
+                        <p>Alt text improvements require manual editing in Canvas. These accessibility issues need your attention:</p>
+                        
+                        <div class="manual-steps">
+                            <h5>🔧 Step-by-Step Fix Process:</h5>
+                            <ol>
+                                <li><strong>Open the page</strong> - Click on any issue below to open the page in Canvas</li>
+                                <li><strong>Switch to HTML editor</strong> - Click the HTML editor button in Canvas</li>
+                                <li><strong>Locate the image</strong> - Find the image within the figure tags</li>
+                                <li><strong>Update alt text</strong> - Add or improve the alt attribute based on recommendations</li>
+                                <li><strong>Save changes</strong> - Switch back to Rich Content Editor and save</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="findings-list">\`;
+
+                    requires_manual_review.forEach((item, index) => {
+                        const canvasUrl = generateEnhancedCanvasLink(item);
+                        const severityClass = item.severity === 'high' ? 'severity-high' : 'severity-medium';
+                        const actionIcon = item.compliance_status === 'missing' ? '❌' : 
+                                         item.compliance_status === 'empty_non_decorative' ? '⚠️' : '🔧';
+                        
+                        html += \`
+                            <div class="finding-item \${severityClass}" style="margin-bottom: 16px;">
+                                <div class="item-header">
+                                    <span class="icon">\${actionIcon}</span>
+                                    <strong>Page: \${item.page_title}</strong>
+                                    <span class="severity-badge severity-\${item.severity}">\${item.severity?.toUpperCase() || 'MEDIUM'}</span>
+                                </div>
+                                <div class="item-details">
+                                    <p><strong>Issue:</strong> \${item.compliance_details?.join(', ') || 'Alt text needs improvement'}</p>
+                                    <p><strong>Current Alt Text:</strong> "\${item.alt_text || '[missing]'}"</p>
+                                    <p><strong>Recommendation:</strong> \${item.recommendations?.join(', ') || 'Add descriptive alt text'}</p>
+                                    <p><strong>Image Type:</strong> \${item.is_likely_decorative ? 'Decorative' : 'Informative'}</p>
+                                    <div class="item-actions">
+                                        <a href="\${canvasUrl}" target="_blank" class="btn-secondary">🔗 Open in Canvas</a>
+                                        <input type="checkbox" class="action-checkbox" data-index="\${index}" />
+                                        <label>Mark as Reviewed</label>
+                                    </div>
+                                </div>
+                            </div>\`;
+                    });
+
+                    html += \`
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length > 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4>✅ Clear Accessibility Violations (\${safe_actions.length})</h4>
+                        <p>These are clear accessibility violations that need immediate attention:</p>
+                        <div class="findings-list">\`;
+
+                    safe_actions.forEach((item, index) => {
+                        const canvasUrl = generateEnhancedCanvasLink(item);
+                        const actionIcon = item.compliance_status === 'missing' ? '❌' : '⚠️';
+                        
+                        html += \`
+                            <div class="finding-item severity-high" style="margin-bottom: 16px;">
+                                <div class="item-header">
+                                    <span class="icon">\${actionIcon}</span>
+                                    <strong>Page: \${item.page_title}</strong>
+                                    <span class="severity-badge severity-high">HIGH</span>
+                                </div>
+                                <div class="item-details">
+                                    <p><strong>Issue:</strong> \${item.compliance_details?.join(', ') || 'Critical accessibility issue'}</p>
+                                    <p><strong>Current Alt Text:</strong> "\${item.alt_text || '[missing]'}"</p>
+                                    <p><strong>Required Action:</strong> \${item.recommended_action || 'Add descriptive alt text'}</p>
+                                    <div class="item-actions">
+                                        <a href="\${canvasUrl}" target="_blank" class="btn-secondary">🔗 Open in Canvas</a>
+                                        <input type="checkbox" class="action-checkbox" data-index="\${index}" />
+                                        <label>Mark as Fixed</label>
+                                    </div>
+                                </div>
+                            </div>\`;
+                    });
+
+                    html += \`
+                        </div>
+                    </div>\`;
+                }
+
+                if (safe_actions.length === 0 && requires_manual_review.length === 0) {
+                    html += \`
+                    <div class="result-section severity-safe">
+                        <h4>🎉 Excellent Alt Text Compliance!</h4>
+                        <p>All images in your course have appropriate alt text that meets accessibility standards.</p>
+                        <div style="margin-top: 12px;">
+                            <strong>✅ Accessibility Features Found:</strong>
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li>Informative images have descriptive alt text</li>
+                                <li>Decorative images properly marked with empty alt text</li>
+                                <li>Alt text length within recommended guidelines</li>
+                                <li>No generic terms like "image" or "picture" used</li>
                             </ul>
                         </div>
                     </div>\`;
@@ -1669,6 +1843,12 @@ function generateEnhancedQADashboard(token) {
                                     '<li>Analyze images and videos within course pages</li>' +
                                     '<li>Check figcaption presence and styling compliance</li>' +
                                     '<li>Provide detailed recommendations for accessibility</li>' :
+                                    taskId === 'alt-text-compliance-checker' ?
+                                    '<li>Access ACU Online Design Library for alt text standards</li>' +
+                                    '<li>Analyze images within figure tags (excludes banners)</li>' +
+                                    '<li>Check alt text presence and quality compliance</li>' +
+                                    '<li>Distinguish decorative vs informative images</li>' +
+                                    '<li>Provide actionable accessibility recommendations</li>' :
                                     '<li>Perform comprehensive analysis</li>' +
                                     '<li>Check for potential issues</li>' +
                                     '<li>Identify areas for improvement</li>' +
