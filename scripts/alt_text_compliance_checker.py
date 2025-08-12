@@ -38,6 +38,7 @@ import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
+from common.progress import ProgressReporter
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -561,6 +562,7 @@ def main():
     args = parser.parse_args()
     
     try:
+        progress = ProgressReporter(enabled=True)
         if args.execute_approved:
             print("❌ Execute mode not implemented yet. Alt text fixes require manual intervention.")
             sys.exit(1)
@@ -572,8 +574,8 @@ def main():
             print("❌ Canvas API connection failed.")
             sys.exit(1)
         
-        print("🚀 Starting parallel data fetching...")
-        print(f"📚 Fetching target course ({args.course_id}) and design library (26333) simultaneously...")
+        progress.update(step="initialize", message="Preparing analysis")
+        progress.update(step="fetch_courses", current=0, total=2, message="Fetching target & design library")
         
         # Fetch both courses in parallel
         start_time = time.time()
@@ -587,7 +589,7 @@ def main():
         course_pages = course_data.get(args.course_id, [])
         design_library_pages = course_data.get('26333', [])
         
-        print(f"⚡ Parallel fetch completed in {fetch_time:.1f} seconds")
+        progress.update(step="fetch_courses", current=2, total=2, message=f"Fetch complete in {fetch_time:.1f}s")
         
         if not course_pages:
             print(f"❌ Could not access Course {args.course_id}")
@@ -597,7 +599,7 @@ def main():
             print("⚠️  Could not access ACU Online Design Library - continuing with fallback standards")
         
         # Perform analysis
-        print("🔍 Analyzing alt text compliance...")
+        progress.update(step="analyze_course", current=0, total=len(course_pages) or 1, message="Analyzing course content")
         analyzer = AltTextAnalyzer()
         
         # Process design standards and course analysis in parallel
@@ -608,11 +610,18 @@ def main():
             else:
                 standards_future = None
                 
-            compliance_future = executor.submit(
-                analyzer.analyze_content_compliance,
-                course_pages, 
-                f"Course {args.course_id}"
-            )
+            # Wrap analysis to emit per-page progress
+            def analyze_with_progress(pages, course_label):
+                results = []
+                total = len(pages) or 1
+                for idx, _ in enumerate(pages, 1):
+                    progress.update(step="analyze_course", current=idx-1, total=total, message=f"Analyzing page {idx}/{total}")
+                # Use existing analyzer method once to compute full results
+                results = analyzer.analyze_content_compliance(pages, course_label)
+                progress.update(step="analyze_course", current=total, total=total, message="Analysis complete")
+                return results
+
+            compliance_future = executor.submit(analyze_with_progress, course_pages, f"Course {args.course_id}")
             
             # Collect results
             if standards_future:
@@ -637,12 +646,14 @@ def main():
         )
         
         # Output for LTI integration
+        progress.done({"summary": enhanced_output.get("summary", {})})
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(enhanced_output, indent=2))
         
     except KeyboardInterrupt:
         print("\n⏹️  Analysis interrupted by user.")
         sys.exit(1)
     except Exception as e:
+        progress.error(str(e))
         print(f"❌ Error occurred: {e}")
         import traceback
         traceback.print_exc()
