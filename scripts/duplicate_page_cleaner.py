@@ -36,6 +36,7 @@ import concurrent.futures
 import argparse
 import sys
 from requests.adapters import HTTPAdapter
+from common.progress import ProgressReporter
 from urllib3.util.retry import Retry
 
 # --- SCRIPT CONFIGURATION ---
@@ -85,7 +86,7 @@ class CanvasDuplicateCleaner:
                 raise
         return results
 
-    def _get_inbound_links_map(self) -> Dict[str, Set[str]]:
+    def _get_inbound_links_map(self, progress: ProgressReporter | None = None) -> Dict[str, Set[str]]:
         """
         CRITICAL SAFETY FEATURE: Scans all course content to find which pages have inbound links.
         This is the core of the HCD safety mechanism.
@@ -94,6 +95,8 @@ class CanvasDuplicateCleaner:
             return self.inbound_links_map
 
         self.logger.info("Scanning all course content for inbound links (Pages, Assignments, etc.)...")
+        if progress:
+            progress.update(step="scan_links", current=0, total=len(CONTENT_TYPES_TO_SCAN), message="Scanning inbound links")
         link_map: Dict[str, Set[str]] = {}
 
         def scan_item_for_links(item: Dict, item_type: str):
@@ -120,13 +123,15 @@ class CanvasDuplicateCleaner:
                 self.logger.warning(f"Could not scan content type '{content_type}': {e}")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
-            executor.map(fetch_and_scan_content, CONTENT_TYPES_TO_SCAN)
+            list(executor.map(fetch_and_scan_content, CONTENT_TYPES_TO_SCAN))
+        if progress:
+            progress.update(step="scan_links", current=len(CONTENT_TYPES_TO_SCAN), total=len(CONTENT_TYPES_TO_SCAN), message="Link scan complete")
 
         self.logger.info(f"Finished link scan. Found links to {len(link_map)} unique pages.")
         self.inbound_links_map = link_map
         return self.inbound_links_map
 
-    def _get_page_objects(self) -> Tuple[List[Dict], List[Dict]]:
+    def _get_page_objects(self, progress: ProgressReporter | None = None) -> Tuple[List[Dict], List[Dict]]:
         """Fetches all pages and classifies them as 'official' (in a module) or 'orphaned'."""
         self.logger.info("Fetching all course pages and identifying official module pages...")
         
@@ -135,6 +140,8 @@ class CanvasDuplicateCleaner:
         
         # Fetch full details for each page (THIS IS THE CRITICAL MISSING STEP!)
         self.logger.info(f"Fetching full details for {len(basic_pages)} pages...")
+        if progress:
+            progress.update(step="fetch_pages", current=0, total=len(basic_pages) or 1, message="Fetching full page details")
         def fetch_full_page(page):
             try:
                 # Use session directly for single page request (not paginated)
@@ -149,7 +156,12 @@ class CanvasDuplicateCleaner:
         
         # Use concurrent fetching like the standalone version
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
-            results = list(executor.map(fetch_full_page, basic_pages))
+            results = []
+            for idx, full in enumerate(executor.map(fetch_full_page, basic_pages), 1):
+                if full is not None:
+                    results.append(full)
+                if progress:
+                    progress.update(step="fetch_pages", current=idx, total=len(basic_pages) or 1, message=f"Fetched {idx}/{len(basic_pages) or 1} pages")
         all_pages = [r for r in results if r is not None]
         self.logger.info(f"Successfully fetched full details for {len(all_pages)} pages.")
         
@@ -167,7 +179,7 @@ class CanvasDuplicateCleaner:
                 self.logger.warning(f"Could not get items for module '{module.get('name')}': {e}")
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_API_WORKERS) as executor:
-            executor.map(get_module_items, modules)
+            list(executor.map(get_module_items, modules))
         
         official_pages = [p for p in all_pages if p['url'] in official_page_urls]
         orphaned_pages = [p for p in all_pages if p['url'] not in official_page_urls]
@@ -190,14 +202,16 @@ class CanvasDuplicateCleaner:
         logger.debug(f"Page '{page_title}' content hash: {content_hash[:8]}... (length: {len(normalized)} chars)")
         return content_hash
     
-    def analyze_duplicates(self) -> Dict:
+    def analyze_duplicates(self, progress: ProgressReporter | None = None) -> Dict:
         """
         Performs the full analysis and returns structured findings.
         This is the main "brain" of the script.
         """
         self.logger.info("Starting duplicate analysis...")
-        official_pages, orphaned_pages = self._get_page_objects()
-        inbound_links_map = self._get_inbound_links_map()
+        if progress:
+            progress.update(step="initialize", message="Preparing analysis")
+        official_pages, orphaned_pages = self._get_page_objects(progress=progress)
+        inbound_links_map = self._get_inbound_links_map(progress=progress)
         
         all_pages = official_pages + orphaned_pages
         if not all_pages:
@@ -216,7 +230,8 @@ class CanvasDuplicateCleaner:
         requires_manual_review: List[Dict] = []
         processed_urls: Set[str] = set()
 
-        for h, pages in hash_to_pages.items():
+        total_groups = len(hash_to_pages) or 1
+        for idx, (h, pages) in enumerate(hash_to_pages.items(), 1):
             if len(pages) < 2:
                 continue
 
@@ -260,8 +275,11 @@ class CanvasDuplicateCleaner:
                     finding["risk_level"] = "LOW"
                     safe_actions.append(finding)
 
+            if progress:
+                progress.update(step="analyze_duplicates", current=idx, total=total_groups, message=f"Analyzed {idx}/{total_groups} duplicate groups")
+
         self.logger.info(f"Analysis complete. Found {len(safe_actions)} safe actions and {len(requires_manual_review)} items for manual review.")
-        return {
+        result = {
             "summary": {
                 "pages_scanned": len(all_pages),
                 "official_pages": len(official_pages),
@@ -275,6 +293,9 @@ class CanvasDuplicateCleaner:
                 "requires_manual_review": requires_manual_review,
             }
         }
+        if progress:
+            progress.done({"summary": result.get("summary", {})})
+        return result
 
     def execute_approved_actions(self, actions: List[Dict]) -> Dict:
         """Deletes pages from a list of approved actions."""
@@ -342,7 +363,8 @@ def main():
 
         else: # --analyze-only is the other option
             print(f"Performing analysis for course: {args.course_id}", file=sys.stderr)
-            analysis_results = cleaner.analyze_duplicates()
+            progress = ProgressReporter(enabled=True)
+            analysis_results = cleaner.analyze_duplicates(progress=progress)
             # Print final analysis to stdout for the Node.js server
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_results, indent=2))
             

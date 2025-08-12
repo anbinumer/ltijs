@@ -25,6 +25,7 @@ import json
 import logging
 import argparse
 from typing import Dict, List, Any, Optional
+from common.progress import ProgressReporter
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -111,12 +112,16 @@ class CanvasClient:
         return resp.json() if resp.content else {}
 
 
-def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
+def analyze_course(canvas: CanvasClient, course_id: str, progress: ProgressReporter | None = None) -> Dict:
     logging.info(f"Analyzing course {course_id} for empty groups and modules")
+    if progress:
+        progress.update(step="initialize", message="Preparing analysis")
 
     course = canvas.get_course(course_id)
     is_weighted = bool(course.get('apply_assignment_group_weights'))
 
+    if progress:
+        progress.update(step="fetch_groups_modules", message="Fetching groups & modules")
     groups = canvas.get_assignment_groups(course_id)
     modules = canvas.get_modules(course_id)
 
@@ -130,6 +135,8 @@ def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
     manual_review: List[Dict[str, Any]] = []
 
     # Assignment groups
+    total = len(groups) + len(modules) or 1
+    processed = 0
     for g in groups:
         assignments = g.get('assignments') or []
         is_empty = len(assignments) == 0
@@ -149,6 +156,9 @@ def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
             else:
                 item.update({'reason': 'Weighted grading enabled and group has non-zero weight', 'severity': 'medium'})
                 manual_review.append(item)
+        processed += 1
+        if progress:
+            progress.update(step="analyze_groups_modules", current=processed, total=total, message=f"Processed {processed}/{total} items")
 
     # Modules
     for m in modules:
@@ -178,6 +188,9 @@ def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
                 reason_text = ' and '.join(reason_bits) if reason_bits else 'needs review'
                 item.update({'reason': f'Module is empty but {reason_text}', 'severity': 'medium'})
                 manual_review.append(item)
+        processed += 1
+        if progress:
+            progress.update(step="analyze_groups_modules", current=processed, total=total, message=f"Processed {processed}/{total} items")
 
     summary = {
         'groups_scanned': len(groups),
@@ -188,7 +201,7 @@ def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
         'prerequisite_linked_modules': len([1 for m in manual_review if m['type'] == 'delete_module' and m.get('is_prerequisite_target')]),
     }
 
-    return {
+    result = {
         'success': True,
         'phase': 2,
         'mode': 'preview_first',
@@ -204,6 +217,9 @@ def analyze_course(canvas: CanvasClient, course_id: str) -> Dict:
             'published_empty_modules': len([1 for m in manual_review if m['type'] == 'delete_module' and m.get('published') is True]),
         }
     }
+    if progress:
+        progress.done({"summary": summary})
+    return result
 
 
 def execute_actions(canvas: CanvasClient, course_id: str, actions: List[Dict[str, Any]]) -> Dict:
@@ -265,7 +281,8 @@ def main():
             return
 
         # default to analysis
-        analysis = analyze_course(client, args.course_id)
+        progress = ProgressReporter(enabled=True)
+        analysis = analyze_course(client, args.course_id, progress=progress)
         print('ENHANCED_ANALYSIS_JSON:', json.dumps(analysis, indent=2))
 
     except Exception as e:

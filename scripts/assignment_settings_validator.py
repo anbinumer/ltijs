@@ -31,6 +31,7 @@ import argparse
 import sys
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from common.progress import ProgressReporter
 
 # --- SCRIPT CONFIGURATION ---
 LOGGING_LEVEL = logging.INFO
@@ -92,8 +93,10 @@ class CanvasAssignmentValidator:
             return due_date < datetime.now(timezone.utc)
         except (ValueError, TypeError): return False
 
-    def analyze_course_assignments(self) -> Dict:
+    def analyze_course_assignments(self, progress: ProgressReporter | None = None) -> Dict:
         self.logger.info("Fetching all assignments, groups, and course data...")
+        if progress:
+            progress.update(step="fetch_assignments", message="Fetching assignments & groups")
         assignments = self._make_paginated_request(f"courses/{self.course_id}/assignments", params={'include': ['rubric']})
         assignment_groups = self._make_paginated_request(f"courses/{self.course_id}/assignment_groups")
         group_map = {g['id']: g['name'] for g in assignment_groups}
@@ -104,7 +107,8 @@ class CanvasAssignmentValidator:
 
         safe_actions, requires_manual_review, all_violations = [], [], []
 
-        for assignment in assignments:
+        total = len(assignments) or 1
+        for idx, assignment in enumerate(assignments, 1):
             has_submissions = assignment.get('has_submitted_submissions', False)
             is_past_due = self._is_past_due(assignment)
             is_locked_for_edits = has_submissions or is_past_due
@@ -130,8 +134,10 @@ class CanvasAssignmentValidator:
                     safe_actions.append(finding)
                 else:
                     requires_manual_review.append(finding)
+            if progress:
+                progress.update(step="analyze_assignments", current=idx, total=total, message=f"Analyzed {idx}/{total} assignments")
         
-        return {
+        result = {
             "summary": {
                 "assignments_scanned": len(assignments),
                 "assignments_with_issues": len(set(v['assignment_id'] for v in all_violations)),
@@ -141,6 +147,9 @@ class CanvasAssignmentValidator:
             },
             "findings": {"safe_actions": safe_actions, "requires_manual_review": requires_manual_review}
         }
+        if progress:
+            progress.done({"summary": result.get("summary", {})})
+        return result
 
     def _validate_single_assignment(self, assignment: Dict, group_map: Dict) -> List[Dict]:
         """Runs all validation checks from the standalone script on a single assignment."""
@@ -255,7 +264,8 @@ def main():
 
         else: # --analyze-only
             print(f"Performing assignment analysis for course: {args.course_id}", file=sys.stderr)
-            analysis_results = validator.analyze_course_assignments()
+            progress = ProgressReporter(enabled=True)
+            analysis_results = validator.analyze_course_assignments(progress=progress)
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_results, indent=2))
             
     except Exception as e:
