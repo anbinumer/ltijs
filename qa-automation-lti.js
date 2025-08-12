@@ -21,11 +21,7 @@ if (process.env.MONGODB_URL) {
 // Safe: If scripts do not emit progress, this remains unused.
 let latestProgressEvent = null
 
-// Whitelist and expose a lightweight progress endpoint for polling
-lti.whitelist('/progress/latest')
-lti.app.get('/progress/latest', (_req, res) => {
-  res.json(latestProgressEvent || { status: 'idle' })
-})
+// NOTE: Progress endpoint will be registered after setup to ensure lti.app is ready
 
 // Setup provider
 lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024',
@@ -52,6 +48,11 @@ lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024',
 // Whitelist the execute endpoints
 lti.whitelist('/execute')
 lti.whitelist('/execute-approved')
+// Register progress endpoint after setup (lti.app is now available)
+lti.whitelist('/progress/latest')
+lti.app.get('/progress/latest', (_req, res) => {
+  res.json(latestProgressEvent || { status: 'idle' })
+})
 
 // --- BACKEND LOGIC ---
 
@@ -2308,4 +2309,14 @@ const setup = async () => {
 }
 
 setup()
+
+// Register progress endpoint only after setup so lti.app is ready
+try {
+  lti.whitelist('/progress/latest')
+  lti.app.get('/progress/latest', (_req, res) => {
+    res.json(latestProgressEvent || { status: 'idle' })
+  })
+} catch (e) {
+  console.log('Progress endpoint registration deferred or already available')
+}
 
