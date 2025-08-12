@@ -37,6 +37,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup, Tag
+from common.progress import ProgressReporter
 import re
 
 # Configuration
@@ -134,7 +135,7 @@ class FigcaptionComplianceAnalyzer:
         self.logger = logging.getLogger(__name__)
         self.design_standards = {}
     
-    def analyze_course(self, course_id: str) -> Dict[str, Any]:
+    def analyze_course(self, course_id: str, progress: ProgressReporter | None = None) -> Dict[str, Any]:
         """
         Main analysis method that orchestrates the complete figcaption compliance check
         
@@ -143,14 +144,27 @@ class FigcaptionComplianceAnalyzer:
         self.logger.info(f"Starting figcaption compliance analysis for course {course_id}")
         
         try:
+            if progress:
+                progress.update(step="initialize", message="Preparing analysis")
             # Step 1: Extract design standards from ACU Online Design Library
+            if progress:
+                progress.update(step="fetch_design_library", message="Fetching design standards")
             design_standards = self._extract_design_standards()
             
             # Step 2: Get all course pages with content
+            if progress:
+                progress.update(step="fetch_course_pages", message="Fetching course pages")
             course_pages = self._get_course_pages_with_content(course_id)
             
             # Step 3: Analyze each page for figcaption compliance
-            compliance_results = self._analyze_pages_compliance(course_pages, course_id)
+            total_pages = len(course_pages) or 1
+            if progress:
+                progress.update(step="analyze_pages", current=0, total=total_pages, message="Analyzing pages")
+            compliance_results = []
+            for idx, page in enumerate(course_pages, 1):
+                compliance_results.extend(self._analyze_pages_compliance([page], course_id))
+                if progress:
+                    progress.update(step="analyze_pages", current=idx, total=total_pages, message=f"Analyzed {idx}/{total_pages} pages")
             
             # Step 4: Generate summary statistics
             summary = self._generate_summary_statistics(compliance_results)
@@ -180,10 +194,14 @@ class FigcaptionComplianceAnalyzer:
             }
             
             self.logger.info(f"Analysis complete. Found {summary['items_scanned']} media elements")
+            if progress:
+                progress.done({"items_scanned": summary.get("items_scanned", 0)})
             return enhanced_output
             
         except Exception as e:
             self.logger.error(f"Analysis failed: {e}", exc_info=True)
+            if progress:
+                progress.error(str(e))
             return {
                 "phase": 2,
                 "mode": "preview_first", 
@@ -624,7 +642,8 @@ def main():
             # Perform analysis
             logger.info(f"Starting figcaption compliance analysis for course {args.course_id}")
             analyzer = FigcaptionComplianceAnalyzer(canvas)
-            analysis_results = analyzer.analyze_course(args.course_id)
+            progress = ProgressReporter(enabled=True)
+            analysis_results = analyzer.analyze_course(args.course_id, progress=progress)
             
             # Output results in LTI Phase 2 format
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_results, indent=2))

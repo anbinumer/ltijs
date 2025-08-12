@@ -43,6 +43,7 @@ from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup, Tag
 import re
 from threading import Lock
+from common.progress import ProgressReporter
 
 # Configuration
 LOGGING_LEVEL = logging.INFO
@@ -307,12 +308,13 @@ class TranscriptComplianceAnalyzer:
         self.design_standards = design_standards
         self.logger = logging.getLogger(__name__)
         
-    def analyze_course_compliance(self, pages: List[Dict], course_id: str) -> List[Dict]:
+    def analyze_course_compliance(self, pages: List[Dict], course_id: str, progress: ProgressReporter | None = None) -> List[Dict]:
         """Analyze course pages for transcript button compliance - only images with transcript buttons"""
         compliance_results = []
         
         self.logger.info(f"🔍 Analyzing course {course_id} for transcript button compliance...")
         
+        total_pages = len(pages) or 1
         for page_num, page in enumerate(pages, 1):
             if not page.get('body'):
                 continue
@@ -336,6 +338,10 @@ class TranscriptComplianceAnalyzer:
                         )
                         if result:
                             compliance_results.append(result)
+
+            # Progress update per page
+            if progress:
+                progress.update(step="analyze_pages", current=page_num, total=total_pages, message=f"Analyzed {page_num}/{total_pages} pages")
 
         self.logger.info(f"✓ Analyzed {len(compliance_results)} images with transcript buttons")
         return compliance_results
@@ -677,9 +683,13 @@ def main():
         if args.analyze_only:
             # Phase 2 Analysis Mode
             logger.info("📊 Starting transcript button compliance analysis...")
+            progress = ProgressReporter(enabled=True)
+            progress.update(step="initialize", message="Preparing analysis")
             
             # Parallel data fetching
+            progress.update(step="fetch_parallel", current=0, total=2, message="Fetching design library & course")
             design_library_pages, target_course_pages = fetch_data_parallel(canvas_session, args.course_id)
+            progress.update(step="fetch_parallel", current=2, total=2, message="Fetch complete")
             
             if not design_library_pages:
                 logger.error("❌ Failed to fetch Design Library standards")
@@ -695,7 +705,8 @@ def main():
             
             # Analyze target course compliance
             compliance_analyzer = TranscriptComplianceAnalyzer(canvas_session, design_standards)
-            compliance_results = compliance_analyzer.analyze_course_compliance(target_course_pages, args.course_id)
+            progress.update(step="analyze_pages", current=0, total=len(target_course_pages) or 1, message="Analyzing pages")
+            compliance_results = compliance_analyzer.analyze_course_compliance(target_course_pages, args.course_id, progress=progress)
             
             # Generate enhanced output
             course_info = {
@@ -707,6 +718,7 @@ def main():
             enhanced_output = generate_enhanced_analysis_output(compliance_results, design_standards, course_info)
             
             # Output for LTI integration
+            progress.done({"total_pages": len(target_course_pages)})
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(enhanced_output))
             
         elif args.execute_from_json:
@@ -733,6 +745,10 @@ def main():
         sys.exit(1)
     except Exception as e:
         logger.error(f"❌ Unexpected error: {e}")
+        try:
+            ProgressReporter(enabled=True).error(str(e))
+        except Exception:
+            pass
         import traceback
         traceback.print_exc()
         sys.exit(1)
