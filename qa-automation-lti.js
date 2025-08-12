@@ -544,6 +544,10 @@ function generateEnhancedQADashboard(token) {
             <div class="progress-spinner"></div>
             <h3 id="progressText">Initializing analysis...</h3>
             <p id="progressDetails">This may take a few moments.</p>
+            <div id="progressBarWrap" style="margin-top:12px; background:#eee; height:10px; border-radius:6px; overflow:hidden;">
+                <div id="progressBar" style="height:100%; width:0%; background: var(--acu-red);"></div>
+            </div>
+            <p id="progressPercent" style="margin:8px 0 0; font-size:12px; color:#666;">0%</p>
         </div>
     </div>
 
@@ -632,16 +636,41 @@ function generateEnhancedQADashboard(token) {
 
 
 
+            let progressPoller = null;
             function showProgress(text, details) {
                 document.getElementById('progressText').textContent = text;
                 document.getElementById('progressDetails').textContent = details;
                 document.getElementById('progressOverlay').classList.add('active');
+                // Start polling centralized progress endpoint
+                if (progressPoller) clearInterval(progressPoller);
+                progressPoller = setInterval(async () => {
+                    try {
+                        const resp = await fetch('/progress/latest');
+                        if (!resp.ok) return;
+                        const evt = await resp.json();
+                        if (!evt || evt.status === 'idle') return;
+                        const pct = evt.total ? Math.floor((evt.current || 0) * 100 / evt.total) : null;
+                        if (evt.step) document.getElementById('progressText').textContent = evt.step.replace(/_/g,' ');
+                        if (evt.message) document.getElementById('progressDetails').textContent = evt.message;
+                        if (pct !== null && !isNaN(pct)) {
+                            const bar = document.getElementById('progressBar');
+                            const label = document.getElementById('progressPercent');
+                            bar.style.width = pct + '%';
+                            label.textContent = pct + '%';
+                        }
+                    } catch (e) { /* ignore */ }
+                }, 1000);
             }
 
 
 
             function hideProgress() {
                 document.getElementById('progressOverlay').classList.remove('active');
+                const bar = document.getElementById('progressBar');
+                const label = document.getElementById('progressPercent');
+                if (bar) bar.style.width = '0%';
+                if (label) label.textContent = '0%';
+                if (progressPoller) { clearInterval(progressPoller); progressPoller = null; }
             }
 
 
