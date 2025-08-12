@@ -190,7 +190,7 @@ class AltTextAnalyzer:
         self.design_standards = standards
         return standards
     
-    def analyze_content_compliance(self, pages: List[Dict], course_name: str = "Target Course") -> List[Dict]:
+    def analyze_content_compliance(self, pages: List[Dict], course_name: str = "Target Course", progress: Optional[ProgressReporter] = None) -> List[Dict]:
         """Analyze content for alt text compliance"""
         compliance_results = []
         total_images_found = 0
@@ -199,6 +199,7 @@ class AltTextAnalyzer:
         self.logger.info(f"🔍 Analyzing {course_name} for alt text compliance...")
         self.logger.info("📋 Focus: Images within <figure> tags only")
         
+        total_pages = len(pages) or 1
         for page_num, page in enumerate(pages, 1):
             if not page.get('body'):
                 continue
@@ -230,6 +231,11 @@ class AltTextAnalyzer:
                 if result:
                     compliance_results.append(result)
                     figure_images_analyzed += 1
+
+            # Emit per-page progress update
+            if progress:
+                progress.update(step="analyze_course", current=page_num, total=total_pages,
+                                message=f"Analyzed page {page_num}/{total_pages}")
 
         self.logger.info(f"📊 Analysis Complete: {figure_images_analyzed} images analyzed")
         return compliance_results
@@ -614,10 +620,10 @@ def main():
             def analyze_with_progress(pages, course_label):
                 results = []
                 total = len(pages) or 1
-                for idx, _ in enumerate(pages, 1):
-                    progress.update(step="analyze_course", current=idx-1, total=total, message=f"Analyzing page {idx}/{total}")
-                # Use existing analyzer method once to compute full results
-                results = analyzer.analyze_content_compliance(pages, course_label)
+                # Kick off with 0%
+                progress.update(step="analyze_course", current=0, total=total, message=f"Analyzing 0/{total}")
+                # Run analysis and emit updates per page
+                results = analyzer.analyze_content_compliance(pages, course_label, progress=progress)
                 progress.update(step="analyze_course", current=total, total=total, message="Analysis complete")
                 return results
 
