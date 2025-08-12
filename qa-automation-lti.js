@@ -7,6 +7,15 @@ require('dotenv').config()
 // Require Provider 
 const lti = require('ltijs').Provider
 
+// Debug MongoDB URL
+console.log('🔍 MONGODB_URL check:', process.env.MONGODB_URL ? 'Set' : 'Not set')
+if (process.env.MONGODB_URL) {
+  const safeUrl = process.env.MONGODB_URL.replace(/\/\/[^@]+@/, '//***:***@')
+  console.log('📊 MongoDB URL:', safeUrl)
+} else {
+  console.log('⚠️ MONGODB_URL not set, using localhost fallback')
+}
+
 // Setup provider
 lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024',
   { // Database configuration
