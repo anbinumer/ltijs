@@ -42,6 +42,7 @@ from openpyxl.utils import get_column_letter
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from common.progress import ProgressReporter
 
 # Script Configuration
 LOGGING_LEVEL = logging.INFO
@@ -298,10 +299,12 @@ class AssessmentDateUpdater:
         
         return (new_html, changes_made) if new_html != well_html else (well_html, [])
 
-    def analyze_course(self, course_id: str) -> Dict:
+    def analyze_course(self, course_id: str, progress: ProgressReporter | None = None) -> Dict:
         """Analyzes a single course for date replacement opportunities."""
         try:
             # Get course information with syllabus
+            if progress:
+                progress.update(step="fetch_course_info", message="Fetching course info & syllabus")
             course_info = self._make_api_request(f'courses/{course_id}', params={'include[]': 'syllabus_body'})
             if not course_info:
                 return self._create_analysis_result(course_id, "Unknown", "", error="Failed to retrieve course information")
@@ -311,6 +314,8 @@ class AssessmentDateUpdater:
             self.logger.info(f"Analyzing course: {course_name} (ID: {course_id})")
 
             # Parse syllabus for date mapping
+            if progress:
+                progress.update(step="parse_syllabus", message="Parsing syllabus date map")
             date_map = self._parse_syllabus_for_date_map(course_info.get('syllabus_body', ''))
             if not date_map:
                 return self._create_analysis_result(
@@ -319,6 +324,8 @@ class AssessmentDateUpdater:
                 )
 
             # Get course modules
+            if progress:
+                progress.update(step="fetch_modules", message="Fetching modules")
             modules = self._get_paginated_results(f'courses/{course_id}/modules')
             if not modules:
                 return self._create_analysis_result(
@@ -336,6 +343,8 @@ class AssessmentDateUpdater:
                 'syllabus_parsing_successful': True
             }
 
+            total_modules = len(modules) or 1
+            processed = 0
             for module in modules:
                 module_match = week_pattern.search(module.get('name', ''))
                 if not module_match:
@@ -390,7 +399,14 @@ class AssessmentDateUpdater:
                             }
                             findings['date_replacements'].append(replacement_finding)
 
-            return self._create_analysis_result(course_id, course_name, sis_id, findings)
+                processed += 1
+                if progress:
+                    progress.update(step="analyze_modules", current=processed, total=total_modules, message=f"Analyzed {processed}/{total_modules} modules")
+
+            result = self._create_analysis_result(course_id, course_name, sis_id, findings)
+            if progress:
+                progress.done({"summary": result.get('summary', {})})
+            return result
 
         except Exception as e:
             self.logger.error(f"Error analyzing course {course_id}: {e}", exc_info=True)
@@ -524,7 +540,8 @@ def main():
         if args.analyze_only or not args.execute_from_json:
             # Perform analysis
             print(f"Analyzing course {args.course_id} for date replacement opportunities...", file=sys.stderr)
-            analysis_result = updater.analyze_course(args.course_id)
+        progress = ProgressReporter(enabled=True)
+        analysis_result = updater.analyze_course(args.course_id, progress=progress)
             
             # Output results in JSON format for LTI consumption
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_result, indent=2))

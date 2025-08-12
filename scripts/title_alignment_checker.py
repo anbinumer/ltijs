@@ -36,6 +36,7 @@ from difflib import SequenceMatcher
 import argparse
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from common.progress import ProgressReporter
 
 # Script Configuration
 LOGGING_LEVEL = logging.INFO
@@ -317,12 +318,14 @@ class TitleAlignmentChecker:
         else:
             return False, f"Different titles ({similarity:.1%})", similarity
 
-    def analyze_course(self, course_id: str) -> Dict:
+    def analyze_course(self, course_id: str, progress: ProgressReporter | None = None) -> Dict:
         """Analyze a single course for title alignment and style compliance."""
         self.logger.info(f"Starting analysis for course {course_id}")
         
         try:
             # Get course information including syllabus
+            if progress:
+                progress.update(step="fetch_course_info", message="Fetching course info & syllabus")
             course_info = self._make_api_request(
                 f'courses/{course_id}', 
                 params={'include[]': ['syllabus_body', 'sis_course_id']}
@@ -342,6 +345,8 @@ class TitleAlignmentChecker:
             )
             
             # Get course modules
+            if progress:
+                progress.update(step="fetch_modules", message="Fetching modules")
             modules = self._get_paginated_results(f'courses/{course_id}/modules')
             
             if not modules:
@@ -360,7 +365,8 @@ class TitleAlignmentChecker:
                 'missing_syllabus_entries': []
             }
 
-            for module in modules:
+            total = len(modules) or 1
+            for idx, module in enumerate(modules, 1):
                 module_title_full = module.get('name', '').strip()
                 match = self.module_key_pattern.search(module_title_full)
                 
@@ -380,11 +386,17 @@ class TitleAlignmentChecker:
                 self._check_style_compliance(
                     module_key, module_title_full, findings
                 )
+                if progress:
+                    progress.update(step="analyze_modules", current=idx, total=total, message=f"Analyzed {idx}/{total} modules")
 
             # Create comprehensive analysis result
-            return self._create_analysis_result(
+            result = self._create_analysis_result(
                 course_id, course_name, sis_id, findings=findings
             )
+            if progress:
+                summary = result.get('summary', {})
+                progress.done({"summary": summary})
+            return result
             
         except Exception as e:
             self.logger.error(f"Analysis failed for course {course_id}: {e}")
@@ -715,10 +727,11 @@ def main():
     try:
         # Initialize checker
         checker = TitleAlignmentChecker(args.canvas_url, args.api_token)
+        progress = ProgressReporter(enabled=True)
         
         # Perform analysis
         print(f"Analyzing course {args.course_id} for title alignment...", file=sys.stderr)
-        analysis_result = checker.analyze_course(args.course_id)
+        analysis_result = checker.analyze_course(args.course_id, progress=progress)
         
         # Output results in JSON format for LTI consumption
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_result, indent=2))
