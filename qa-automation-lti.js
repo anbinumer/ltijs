@@ -16,6 +16,17 @@ if (process.env.MONGODB_URL) {
   console.log('⚠️ MONGODB_URL not set, using localhost fallback')
 }
 
+// In-memory progress store (additive, optional)
+// Stores the latest progress event emitted by any running Python task.
+// Safe: If scripts do not emit progress, this remains unused.
+let latestProgressEvent = null
+
+// Whitelist and expose a lightweight progress endpoint for polling
+lti.whitelist('/progress/latest')
+lti.app.get('/progress/latest', (_req, res) => {
+  res.json(latestProgressEvent || { status: 'idle' })
+})
+
 // Setup provider
 lti.setup(process.env.LTI_KEY || 'QA_AUTOMATION_KEY_2024',
   { // Database configuration
@@ -124,7 +135,31 @@ async function analyzeTask(taskId, courseId, userId) {
     let output = '';
     let error = '';
         
-    python.stdout.on('data', (data) => output += data.toString());
+    python.stdout.on('data', (data) => {
+      const text = data.toString()
+      text.split(/\n+/).forEach((line) => {
+        const trimmed = line.trim()
+        if (!trimmed) return
+        if (trimmed.startsWith('PROGRESS:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('PROGRESS:'.length))
+            latestProgressEvent = { type: 'progress', ...payload, ts: Date.now() }
+          } catch (_) { /* ignore parse errors */ }
+        } else if (trimmed.startsWith('DONE:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('DONE:'.length))
+            latestProgressEvent = { type: 'done', ...payload, ts: Date.now() }
+          } catch (_) {}
+        } else if (trimmed.startsWith('ERROR:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('ERROR:'.length))
+            latestProgressEvent = { type: 'error', ...payload, ts: Date.now() }
+          } catch (_) {}
+        } else {
+          output += line + '\n'
+        }
+      })
+    });
     python.stderr.on('data', (data) => error += data.toString());
         
     python.on('close', (code) => {
@@ -231,7 +266,31 @@ async function executeApprovedActions(taskId, courseId, userId, approvedActions)
     let output = '';
     let error = '';
 
-    python.stdout.on('data', (data) => output += data.toString());
+    python.stdout.on('data', (data) => {
+      const text = data.toString()
+      text.split(/\n+/).forEach((line) => {
+        const trimmed = line.trim()
+        if (!trimmed) return
+        if (trimmed.startsWith('PROGRESS:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('PROGRESS:'.length))
+            latestProgressEvent = { type: 'progress', ...payload, ts: Date.now() }
+          } catch (_) { /* ignore parse errors */ }
+        } else if (trimmed.startsWith('DONE:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('DONE:'.length))
+            latestProgressEvent = { type: 'done', ...payload, ts: Date.now() }
+          } catch (_) {}
+        } else if (trimmed.startsWith('ERROR:')) {
+          try {
+            const payload = JSON.parse(trimmed.substring('ERROR:'.length))
+            latestProgressEvent = { type: 'error', ...payload, ts: Date.now() }
+          } catch (_) {}
+        } else {
+          output += line + '\n'
+        }
+      })
+    });
     python.stderr.on('data', (data) => error += data.toString());
 
     python.on('close', (code) => {
