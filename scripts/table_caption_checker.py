@@ -40,6 +40,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from common.progress import ProgressReporter
 
 # Script Configuration
 LOGGING_LEVEL = logging.INFO
@@ -509,7 +510,7 @@ class TableCaptionChecker:
         self.analyzer = TableCaptionAnalyzer()
         self.logger = self.canvas_api.logger
 
-    def analyze_course(self, course_id: str) -> Dict:
+    def analyze_course(self, course_id: str, progress: ProgressReporter | None = None) -> Dict:
         """Analyzes a single course for table caption compliance."""
         try:
             # Get course information
@@ -529,6 +530,8 @@ class TableCaptionChecker:
                 )
 
             # Get course pages using parallel processing
+            if progress:
+                progress.update(step="fetch_course_pages", message="Fetching course pages")
             course_pages = self.canvas_api.get_course_pages_parallel(course_id)
             if not course_pages:
                 return self._create_analysis_result(
@@ -538,6 +541,8 @@ class TableCaptionChecker:
 
             # Access ACU Online Design Library (Course 26333) using parallel processing
             self.logger.info("Accessing ACU Online Design Library (Course 26333)...")
+            if progress:
+                progress.update(step="fetch_design_library", message="Fetching design library")
             design_library_pages = self.canvas_api.get_course_pages_parallel('26333')
             
             if not design_library_pages:
@@ -548,7 +553,15 @@ class TableCaptionChecker:
                 design_standards = self.analyzer.extract_design_standards(design_library_pages)
             
             # Analyze content compliance
-            compliance_results = self.analyzer.analyze_content_compliance(course_pages, course_name)
+            if progress:
+                progress.update(step="analyze_pages", current=0, total=len(course_pages) or 1, message="Analyzing pages")
+            # Emit progress per page via wrapper
+            compliance_results = []
+            total_pages = len(course_pages) or 1
+            for idx, page in enumerate(course_pages, 1):
+                compliance_results.extend(self.analyzer._analyze_page_content(page))
+                if progress:
+                    progress.update(step="analyze_pages", current=idx, total=total_pages, message=f"Analyzed {idx}/{total_pages} pages")
             
             findings = {
                 'compliance_results': compliance_results,
@@ -558,10 +571,14 @@ class TableCaptionChecker:
                 'design_standards': design_standards
             }
 
+            if progress:
+                progress.done({"pages": len(course_pages)})
             return self._create_analysis_result(course_id, course_name, sis_id, findings)
 
         except Exception as e:
             self.logger.error(f"Error analyzing course {course_id}: {e}", exc_info=True)
+            if progress:
+                progress.error(str(e))
             return self._create_analysis_result(course_id, "Unknown", "", error=str(e))
 
     def _get_basic_standards(self) -> Dict:
@@ -870,13 +887,15 @@ def main():
     args = parser.parse_args()
     
     try:
+        progress = ProgressReporter(enabled=True)
+        progress.update(step="initialize", message="Preparing analysis")
         # Initialize checker
         checker = TableCaptionChecker(args.canvas_url, args.api_token)
         
         if args.analyze_only or not args.execute_from_json:
             # Perform analysis
             print(f"Analyzing course {args.course_id} for table caption compliance...", file=sys.stderr)
-            analysis_result = checker.analyze_course(args.course_id)
+            analysis_result = checker.analyze_course(args.course_id, progress=progress)
             
             # Output results in JSON format for LTI consumption
             print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis_result, indent=2))
@@ -947,6 +966,10 @@ def main():
         
     except Exception as e:
         # Output structured error for LTI consumption
+        try:
+            progress.error(str(e))
+        except Exception:
+            pass
         error_output = {
             "success": False,
             "error": str(e),
