@@ -27,6 +27,7 @@ import json
 import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
+from common.progress import ProgressReporter
 
 import requests
 from bs4 import BeautifulSoup
@@ -362,6 +363,7 @@ def main() -> None:
     })
 
     try:
+        progress = ProgressReporter(enabled=True)
         if args.execute_from_json:
             # Load approved actions
             try:
@@ -389,6 +391,7 @@ def main() -> None:
             sys.exit(0)
 
         # Analysis flow
+        progress.update(step="fetch_syllabus", message="Fetching syllabus")
         course = fetch_course_with_syllabus(session, base_url, args.course_id)
         if not course:
             analysis = {
@@ -410,7 +413,9 @@ def main() -> None:
         course_name = course.get("name") or "Unknown"
         syllabus_html = course.get("syllabus_body") or ""
 
+        progress.update(step="analyze_syllabus", current=0, total=1, message="Analyzing syllabus")
         analysis = build_analysis_output(args.course_id, course_name, syllabus_html)
+        progress.done({"summary": analysis.get("summary", {})})
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis))
         sys.exit(0)
 
@@ -429,6 +434,10 @@ def main() -> None:
             "findings": {"safe_actions": [], "requires_manual_review": []},
             "risk_assessment": {"http_error": str(e)},
         }
+        try:
+            progress.error(str(e))
+        except Exception:
+            pass
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis))
         sys.exit(0)
     except Exception as e:
@@ -445,6 +454,10 @@ def main() -> None:
             "findings": {"safe_actions": [], "requires_manual_review": []},
             "risk_assessment": {"error": str(e)},
         }
+        try:
+            progress.error(str(e))
+        except Exception:
+            pass
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(analysis))
         sys.exit(0)
 

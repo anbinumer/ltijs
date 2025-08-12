@@ -29,6 +29,7 @@ from typing import Dict, List, Optional, Any, Tuple
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from common.progress import ProgressReporter
 
 
 LOGGING_LEVEL = logging.INFO
@@ -177,8 +178,10 @@ def parse_iso(dt: Optional[str]) -> Optional[datetime]:
 
 
 def analyze_rubrics(logger: logging.Logger, cs: CanvasSession, course_id: str,
-                    retention_months: int, min_age_days: int) -> Dict[str, Any]:
+                    retention_months: int, min_age_days: int, progress: ProgressReporter | None = None) -> Dict[str, Any]:
     start = time.time()
+    if progress:
+        progress.update(step="initialize", message="Preparing analysis")
 
     # Course info (for workflow_state and term)
     course_info = None
@@ -195,16 +198,23 @@ def analyze_rubrics(logger: logging.Logger, cs: CanvasSession, course_id: str,
     term_name = (course_info or {}).get('term', {}).get('name', 'Unknown')
 
     # Fetch rubrics for course
+    if progress:
+        progress.update(step="fetch_rubrics", message="Fetching rubrics")
     rubrics = cs.paginated(f"courses/{course_id}/rubrics", params={"include[]": ["assessments", "graded_assessments", "peer_assessments"]})
 
     # Build map rubric_id -> associations
     associations_by_rubric: Dict[int, List[Dict[str, Any]]] = {}
+    total = len(rubrics) or 1
+    processed = 0
     for r in rubrics:
         rid = r.get('id')
         if not rid:
             continue
         assoc = cs.paginated(f"courses/{course_id}/rubrics/{rid}/associations")
         associations_by_rubric[rid] = assoc
+        processed += 1
+        if progress:
+            progress.update(step="fetch_associations", current=processed, total=total, message=f"Fetched {processed}/{total} associations")
 
     # For usage_count, attempt to resolve assessments by association
     usage_count_by_rubric: Dict[int, int] = {}
@@ -255,8 +265,11 @@ def analyze_rubrics(logger: logging.Logger, cs: CanvasSession, course_id: str,
 
     duplicates_groups: List[List[Dict[str, Any]]] = []
     grouped_by_hash: Dict[str, List[Dict[str, Any]]] = {}
-    for er in enriched:
+    total_enriched = len(enriched) or 1
+    for idx, er in enumerate(enriched, 1):
         grouped_by_hash.setdefault(er['content_hash'], []).append(er)
+        if progress and idx % 10 == 0:
+            progress.update(step="analyze_rubrics", current=idx, total=total_enriched, message=f"Processed {idx}/{total_enriched} rubrics")
     for h, group in grouped_by_hash.items():
         if h and len(group) > 1:
             # Sort keep-first by last_used_date desc then updated_at desc
@@ -406,6 +419,8 @@ def analyze_rubrics(logger: logging.Logger, cs: CanvasSession, course_id: str,
         }
     }
 
+    if progress:
+        progress.done({"summary": result.get("summary", {})})
     return result
 
 
@@ -471,7 +486,8 @@ def main():
             return
 
         # Default: analyze
-        result = analyze_rubrics(logger, cs, args.course_id, args.retention_months, args.min_age_days)
+        progress = ProgressReporter(enabled=True)
+        result = analyze_rubrics(logger, cs, args.course_id, args.retention_months, args.min_age_days, progress=progress)
         print("ENHANCED_ANALYSIS_JSON:", json.dumps(result))
     except Exception as e:
         # Structured error output for Node caller
